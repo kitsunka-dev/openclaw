@@ -13,9 +13,11 @@ import type { CanvasHostHandler } from "../canvas-host/server.js";
 import { resolveBundledChannelGatewayAuthBypassPaths } from "../channels/plugins/gateway-auth-bypass.js";
 import { loadConfig } from "../config/config.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { resolveCommitHash } from "../infra/git-commit.js";
 import type { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveHookExternalContentSource as resolveHookExternalContentSourceFromSession } from "../security/external-content.js";
 import { safeEqualSecret } from "../security/secret-equal.js";
+import { VERSION as OPENCLAW_VERSION } from "../version.js";
 import { resolveAssistantIdentity } from "./assistant-identity.js";
 import {
   AUTH_RATE_LIMIT_SCOPE_HOOK_AUTH,
@@ -182,6 +184,120 @@ const GATEWAY_PROBE_STATUS_BY_PATH = new Map<string, "live" | "ready">([
   ["/ready", "ready"],
   ["/readyz", "ready"],
 ]);
+
+/**
+ * Kitsunya probe contract (v1) — engine identity + auth + version.
+ *
+ * Kitsunya's M4 probe hits `/v1/auth/ping` expecting JSON
+ *   `{ engine, authenticated: boolean, engine_version?, commit? }`
+ * and `/v1/version` expecting
+ *   `{ engine, version, commit }`.
+ *
+ * Both endpoints require the gateway's Bearer token (same auth as the `/ws` upgrade);
+ * unauthenticated requests get a proper `401` instead of falling through to the SPA,
+ * so probes can rely on status + body shape as real evidence of auth.
+ *
+ * See `docs/gateway/kitsunya-probe-contract.md`.
+ */
+const KITSUNYA_AUTH_PING_PATH = "/v1/auth/ping";
+const KITSUNYA_VERSION_PATH = "/v1/version";
+const KITSUNYA_ENGINE_ID = "openclaw";
+
+function isKitsunyaProbeContractPath(pathname: string): boolean {
+  return pathname === KITSUNYA_AUTH_PING_PATH || pathname === KITSUNYA_VERSION_PATH;
+}
+
+/**
+ * Cached commit resolution. `resolveCommitHash` reads `.git/` / build-info once per
+ * module load; memoizing keeps probe handlers at steady per-request cost.
+ */
+let cachedCommit: string | null | undefined;
+function getCachedCommit(): string | null {
+  if (cachedCommit === undefined) {
+    const resolved = resolveCommitHash({ moduleUrl: import.meta.url });
+    cachedCommit = resolved && resolved.length > 0 ? resolved : null;
+  }
+  return cachedCommit;
+}
+
+async function handleKitsunyaProbeContractRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  requestPath: string,
+  resolvedAuth: ResolvedGatewayAuth,
+  trustedProxies: string[],
+  allowRealIpFallback: boolean,
+  rateLimiter?: AuthRateLimiter,
+): Promise<boolean> {
+  if (!isKitsunyaProbeContractPath(requestPath)) {
+    return false;
+  }
+
+  const method = (req.method ?? "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    res.statusCode = 405;
+    res.setHeader("Allow", "GET, HEAD");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end("Method Not Allowed");
+    return true;
+  }
+
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+
+  // Defer to the shared HTTP auth primitive. Same rate-limiter + Tailscale-off policy
+  // as `/ws` upgrades + other HTTP auth surfaces. No enumeration-oracle risk — reply
+  // shapes are identical across "auth missing" and "auth invalid".
+  const bearerToken = getBearerToken(req);
+  const authResult = await authorizeHttpGatewayConnect({
+    auth: resolvedAuth,
+    connectAuth: bearerToken ? { token: bearerToken, password: bearerToken } : null,
+    req,
+    trustedProxies,
+    allowRealIpFallback,
+    rateLimiter,
+    browserOriginPolicy: resolveHttpBrowserOriginPolicy(req),
+  });
+
+  if (!authResult.ok) {
+    if (authResult.rateLimited) {
+      res.statusCode = 429;
+      if (authResult.retryAfterMs && authResult.retryAfterMs > 0) {
+        res.setHeader("Retry-After", String(Math.ceil(authResult.retryAfterMs / 1000)));
+      }
+    } else {
+      res.statusCode = 401;
+    }
+    res.end(
+      method === "HEAD"
+        ? undefined
+        : JSON.stringify({
+            engine: KITSUNYA_ENGINE_ID,
+            authenticated: false,
+            error: authResult.rateLimited ? "rate_limited" : (authResult.reason ?? "unauthorized"),
+          }),
+    );
+    return true;
+  }
+
+  const commit = getCachedCommit();
+  res.statusCode = 200;
+  const body =
+    requestPath === KITSUNYA_AUTH_PING_PATH
+      ? {
+          engine: KITSUNYA_ENGINE_ID,
+          authenticated: true,
+          engine_version: OPENCLAW_VERSION,
+          commit,
+        }
+      : {
+          engine: KITSUNYA_ENGINE_ID,
+          version: OPENCLAW_VERSION,
+          commit,
+        };
+  res.end(method === "HEAD" ? undefined : JSON.stringify(body));
+  return true;
+}
 const pluginGatewayAuthBypassPathsCache = new WeakMap<
   OpenClawConfig,
   Promise<ReadonlySet<string>>
@@ -1058,6 +1174,24 @@ export function createGatewayHttpServer(opts: {
           rateLimiter,
         }),
       );
+
+      // Kitsunya probe contract (v1): `/v1/auth/ping` + `/v1/version`. Must run BEFORE
+      // the Control UI SPA catch-all so those specific paths get a proper JSON
+      // response (+ 401 on missing/bad auth) instead of falling through to the SPA
+      // shell. See docs/gateway/kitsunya-probe-contract.md.
+      requestStages.push({
+        name: "kitsunya-probe-contract",
+        run: () =>
+          handleKitsunyaProbeContractRequest(
+            req,
+            res,
+            requestPath,
+            resolvedAuth,
+            trustedProxies,
+            allowRealIpFallback,
+            rateLimiter,
+          ),
+      });
 
       if (controlUiEnabled) {
         requestStages.push({
