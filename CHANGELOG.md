@@ -2,6 +2,25 @@
 
 Docs: https://docs.openclaw.ai
 
+## 2026.3.31-kitsunya.1
+
+Pre-release fork published from
+[github.com/barberdog2022-bit/openclaw](https://github.com/barberdog2022-bit/openclaw)
+branch `t2b1-probe-contract-on-v3.31`. Cherry-pick-style patch on top of the upstream
+`v2026.3.31` tag — NO other upstream changes included, so deploying this package does
+not change behavior outside the two new probe-contract routes. Upstream PR planned.
+
+### Changes
+
+- Gateway/HTTP: add `GET /v1/auth/ping` and `GET /v1/version` routes that honor the
+  Kitsunya probe contract (v1). Returns authenticated JSON with `{engine,
+authenticated, engine_version, commit}` / `{engine, version, commit}` on valid
+  Bearer token; 401 (or 429 + Retry-After on rate-limit) with the same identity
+  shape otherwise. Stage registered before the Control UI SPA catch-all so the
+  new paths can't fall through to HTML. Re-uses the existing HTTP auth primitive
+  (`authorizeHttpGatewayConnect`) with the same rate-limit policy as `/ws`
+  upgrades. Docs: [`docs/gateway/kitsunya-probe-contract.md`](docs/gateway/kitsunya-probe-contract.md).
+
 ## 2026.3.31
 
 ### Breaking
