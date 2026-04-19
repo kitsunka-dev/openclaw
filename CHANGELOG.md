@@ -8,6 +8,24 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+## 2026.4.19-beta.2-kitsunya.1
+
+Pre-release fork published from
+[github.com/barberdog2022-bit/openclaw](https://github.com/barberdog2022-bit/openclaw)
+branch `t2b1-probe-contract`. Contains only the gateway probe-contract addition
+below; upstream PR planned.
+
+### Changes
+
+- Gateway/HTTP: add `GET /v1/auth/ping` and `GET /v1/version` routes that honor the
+  Kitsunya probe contract (v1). Returns authenticated JSON with `{engine,
+authenticated, engine_version, commit}` / `{engine, version, commit}` on valid
+  Bearer token; 401 (or 429 + Retry-After on rate-limit) with the same identity
+  shape otherwise. Stage registered before the Control UI SPA catch-all so the
+  new paths can't fall through to HTML. Re-uses the existing HTTP auth primitive
+  (`authorizeHttpGatewayConnect`) with the same rate-limit policy as `/ws`
+  upgrades. Docs: [`docs/gateway/kitsunya-probe-contract.md`](docs/gateway/kitsunya-probe-contract.md).
+
 - Control UI/cron: keep the runtime-only `last` delivery sentinel from being materialized into persisted cron delivery and failure-alert channel configs when jobs are created or edited. (#68829) Thanks @tianhaocui.
 - OpenAI/Responses: strip orphaned reasoning blocks before outbound Responses API calls so compacted or restored histories no longer fail on standalone reasoning items. (#55787) Thanks @suboss87.
 - Cron/CLI: parse PowerShell-style `--tools` allow-lists the same way as comma-separated input, so `cron add` and `cron edit` no longer persist `exec read write` as one combined tool entry on Windows. (#68858) Thanks @chen-zhang-cs-code.
