@@ -128,6 +128,33 @@ export const en: TranslationMap = {
       docsHint: "For remote access, Tailscale Serve is recommended. ",
       docsLink: "Read the docs →",
     },
+    today: {
+      title: "Today",
+      health: {
+        label: "Health",
+        allClear: "All clear",
+        warnings: "Warnings",
+        errors: "Errors",
+        disconnected: "Gateway offline",
+        lastError: "Last error",
+      },
+      attention: {
+        label: "Needs attention",
+        allClear: "Nothing flagged",
+        errorCount: "{count} error(s)",
+        warningCount: "{count} warning(s)",
+      },
+      activity: {
+        label: "Recent activity",
+        empty: "No recent events",
+      },
+      quick: {
+        label: "Quick truth",
+        sessions: "Active sessions",
+        presence: "Operators online",
+        cronNext: "Next cron",
+      },
+    },
     cards: {
       cost: "Cost",
       skills: "Skills",

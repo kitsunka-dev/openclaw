@@ -4468,3 +4468,94 @@ details[open] > .ov-expandable-toggle::after {
     gap: 4px;
   }
 }
+
+/* ── Overview Today (operator truth summary, F3) ─────────────────── */
+.ov-today {
+  margin-top: 16px;
+}
+
+.ov-today-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+.ov-today-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.ov-today-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-accent, var(--bg));
+}
+
+.ov-today-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.ov-today-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ov-today-text {
+  font-size: 14px;
+}
+
+.ov-today-sub {
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.ov-today-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ov-today-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  gap: 8px;
+}
+
+.ov-today-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ov-today-dot.ok {
+  background: var(--ok, #22c55e);
+}
+
+.ov-today-dot.warn {
+  background: var(--warn, #eab308);
+}
+
+.ov-today-dot.err {
+  background: var(--danger, #ef4444);
+}

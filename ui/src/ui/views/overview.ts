@@ -24,6 +24,7 @@ import {
   shouldShowPairingHint,
 } from "./overview-hints.ts";
 import { renderOverviewLogTail } from "./overview-log-tail.ts";
+import { renderOverviewToday } from "./overview-today.ts";
 
 export type OverviewProps = {
   connected: boolean;
@@ -396,6 +397,15 @@ export function renderOverview(props: OverviewProps) {
       cronStatus: props.cronStatus,
       presenceCount: props.presenceCount,
       onNavigate: props.onNavigate,
+    })}
+    ${renderOverviewToday({
+      connected: props.connected,
+      lastError: props.lastError,
+      attentionItems: props.attentionItems,
+      eventLog: props.eventLog,
+      sessionsCount: props.sessionsCount,
+      presenceCount: props.presenceCount,
+      cronNext: props.cronNext,
     })}
     ${renderOverviewAttention({ items: props.attentionItems })}
 
