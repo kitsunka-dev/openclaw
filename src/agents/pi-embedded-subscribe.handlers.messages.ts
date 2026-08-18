@@ -276,7 +276,9 @@ export function handleMessageUpdate(
       emitReasoningEnd(ctx);
     }
     const parsedDelta = visibleDelta ? ctx.consumePartialReplyDirectives(visibleDelta) : null;
-    const parsedFull = parseReplyDirectives(stripTrailingDirective(next));
+    const parsedFull = parseReplyDirectives(stripTrailingDirective(next), {
+      allowMediaTokens: false,
+    });
     const cleanedText = parsedFull.text;
     const { mediaUrls, hasMedia } = resolveSendableOutboundReplyParts(parsedDelta ?? {});
     const hasAudio = Boolean(parsedDelta?.audioAsVoice);
@@ -377,7 +379,9 @@ export function handleMessageEnd(
       : "";
   const formattedReasoning = rawThinking ? formatReasoningMessage(rawThinking) : "";
   const trimmedText = text.trim();
-  const parsedText = trimmedText ? parseReplyDirectives(stripTrailingDirective(trimmedText)) : null;
+  const parsedText = trimmedText
+    ? parseReplyDirectives(stripTrailingDirective(trimmedText), { allowMediaTokens: false })
+    : null;
   let cleanedText = parsedText?.text ?? "";
   let { mediaUrls, hasMedia } = resolveSendableOutboundReplyParts(parsedText ?? {});
 
@@ -386,7 +390,9 @@ export function handleMessageEnd(
     const rawStrippedFinal = rawTrimmed.replace(/<\s*\/?\s*final\s*>/gi, "").trim();
     const rawCandidate = rawStrippedFinal || rawTrimmed;
     if (rawCandidate) {
-      const parsedFallback = parseReplyDirectives(stripTrailingDirective(rawCandidate));
+      const parsedFallback = parseReplyDirectives(stripTrailingDirective(rawCandidate), {
+        allowMediaTokens: false,
+      });
       cleanedText = parsedFallback.text ?? rawCandidate;
       ({ mediaUrls, hasMedia } = resolveSendableOutboundReplyParts(parsedFallback));
     }

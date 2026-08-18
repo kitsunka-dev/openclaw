@@ -8,6 +8,7 @@ import {
   setupSessionsSpawnGatewayMock,
 } from "./openclaw-tools.subagents.sessions-spawn.test-harness.js";
 import { resetSubagentRegistryForTests } from "./subagent-registry.js";
+import { DEFAULT_SUBAGENT_RUN_TIMEOUT_SECONDS } from "./subagent-spawn.js";
 
 const MAIN_SESSION_KEY = "agent:test:main";
 
@@ -37,12 +38,22 @@ describe("sessions_spawn default runTimeoutSeconds (config absent)", () => {
     getCallGatewayMock().mockClear();
   });
 
-  it("falls back to 0 (no timeout) when config key is absent", async () => {
+  it("falls back to a bounded runtime when config key is absent", async () => {
     configureDefaultsWithoutTimeout();
     const gateway = setupSessionsSpawnGatewayMock({});
     const tool = await getSessionsSpawnTool({ agentSessionKey: MAIN_SESSION_KEY });
 
     const result = await tool.execute("call-1", { task: "hello" });
+    expect(result.details).toMatchObject({ status: "accepted" });
+    expect(readSpawnTimeout(gateway.calls)).toBe(DEFAULT_SUBAGENT_RUN_TIMEOUT_SECONDS);
+  });
+
+  it("still allows explicit runTimeoutSeconds: 0 when no-timeout is intentional", async () => {
+    configureDefaultsWithoutTimeout();
+    const gateway = setupSessionsSpawnGatewayMock({});
+    const tool = await getSessionsSpawnTool({ agentSessionKey: MAIN_SESSION_KEY });
+
+    const result = await tool.execute("call-2", { task: "hello", runTimeoutSeconds: 0 });
     expect(result.details).toMatchObject({ status: "accepted" });
     expect(readSpawnTimeout(gateway.calls)).toBe(0);
   });

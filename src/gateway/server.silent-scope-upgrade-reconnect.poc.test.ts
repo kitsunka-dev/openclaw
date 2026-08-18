@@ -49,17 +49,12 @@ describe("gateway silent scope-upgrade reconnect", () => {
       expect(sharedAuthUpgradeAttempt.error?.message).toBe("pairing required");
 
       const pending = await devicePairingModule.listDevicePairing();
-      expect(pending.pending).toHaveLength(1);
+      expect(pending.pending).toHaveLength(0);
       expect(
         (sharedAuthUpgradeAttempt.error?.details as { requestId?: unknown; code?: string })
           ?.requestId,
-      ).toBe(pending.pending[0]?.requestId);
-      const requested = (await requestedEvent) as {
-        payload?: { requestId?: string; deviceId?: string; scopes?: string[] };
-      };
-      expect(requested.payload?.requestId).toBe(pending.pending[0]?.requestId);
-      expect(requested.payload?.deviceId).toBe(paired.deviceId);
-      expect(requested.payload?.scopes).toEqual(["operator.admin"]);
+      ).toBeUndefined();
+      await expect(Promise.race([requestedEvent, new Promise((resolve) => setTimeout(() => resolve(null), 50))])).resolves.toBeNull();
 
       const afterUpgradeAttempt = await getPairedDevice(paired.deviceId);
       expect(afterUpgradeAttempt?.approvedScopes).toEqual(["operator.read"]);
@@ -121,17 +116,11 @@ describe("gateway silent scope-upgrade reconnect", () => {
       expect(reconnectAttempt.error?.message).toBe("pairing required");
 
       const pending = await devicePairingModule.listDevicePairing();
-      expect(pending.pending).toHaveLength(1);
+      expect(pending.pending).toHaveLength(0);
       expect(
         (reconnectAttempt.error?.details as { requestId?: unknown; code?: string })?.requestId,
-      ).toBe(pending.pending[0]?.requestId);
-
-      const requested = (await requestedEvent) as {
-        payload?: { requestId?: string; deviceId?: string; scopes?: string[] };
-      };
-      expect(requested.payload?.requestId).toBe(pending.pending[0]?.requestId);
-      expect(requested.payload?.deviceId).toBe(paired.deviceId);
-      expect(requested.payload?.scopes).toEqual(["operator.admin"]);
+      ).toBeUndefined();
+      await expect(Promise.race([requestedEvent, new Promise((resolve) => setTimeout(() => resolve(null), 50))])).resolves.toBeNull();
 
       const afterAttempt = await getPairedDevice(paired.deviceId);
       expect(afterAttempt?.approvedScopes).toEqual(["operator.read"]);

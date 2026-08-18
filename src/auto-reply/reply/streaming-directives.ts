@@ -17,6 +17,7 @@ type ParsedChunk = ReplyDirectiveParseResult & {
 type ConsumeOptions = {
   final?: boolean;
   silentToken?: string;
+  allowMediaTokens?: boolean;
 };
 
 const splitTrailingDirective = (text: string): { text: string; tail: string } => {
@@ -34,8 +35,11 @@ const splitTrailingDirective = (text: string): { text: string; tail: string } =>
   };
 };
 
-const parseChunk = (raw: string, options?: { silentToken?: string }): ParsedChunk => {
-  const split = splitMediaFromOutput(raw);
+const parseChunk = (
+  raw: string,
+  options?: { silentToken?: string; allowMediaTokens?: boolean },
+): ParsedChunk => {
+  const split = splitMediaFromOutput(raw, { mediaTokens: options?.allowMediaTokens !== false });
   let text = split.text ?? "";
 
   const replyParsed = parseInlineDirectives(text, {
@@ -95,7 +99,10 @@ export function createStreamingDirectiveAccumulator() {
       return null;
     }
 
-    const parsed = parseChunk(combined, { silentToken: options.silentToken });
+    const parsed = parseChunk(combined, {
+      silentToken: options.silentToken,
+      allowMediaTokens: options.allowMediaTokens,
+    });
     const hasTag = activeReply.hasTag || pendingReply.hasTag || parsed.replyToTag;
     const sawCurrent = activeReply.sawCurrent || pendingReply.sawCurrent || parsed.replyToCurrent;
     const explicitId =

@@ -23,6 +23,7 @@ import { createBedrockNoCacheWrapper, isAnthropicBedrockModel } from "./bedrock-
 import { createGoogleThinkingPayloadWrapper } from "./google-stream-wrappers.js";
 import { log } from "./logger.js";
 import { createMinimaxFastModeWrapper } from "./minimax-stream-wrappers.js";
+import { createProviderEnvelopeCaptureWrapper } from "./provider-envelope-capture.js";
 import {
   createMoonshotThinkingWrapper,
   resolveMoonshotThinkingType,
@@ -481,20 +482,19 @@ function applyPostPluginStreamWrappers(
     "parallel_tool_calls",
     "parallelToolCalls",
   );
-  if (rawParallelToolCalls === undefined) {
-    return;
-  }
   if (typeof rawParallelToolCalls === "boolean") {
     ctx.agent.streamFn = createParallelToolCallsWrapper(ctx.agent.streamFn, rawParallelToolCalls);
-    return;
-  }
-  if (rawParallelToolCalls === null) {
+  } else if (rawParallelToolCalls === null) {
     log.debug("parallel_tool_calls suppressed by null override, skipping injection");
-    return;
+  } else if (rawParallelToolCalls !== undefined) {
+    const summary =
+      typeof rawParallelToolCalls === "string" ? rawParallelToolCalls : typeof rawParallelToolCalls;
+    log.warn(`ignoring invalid parallel_tool_calls param: ${summary}`);
   }
-  const summary =
-    typeof rawParallelToolCalls === "string" ? rawParallelToolCalls : typeof rawParallelToolCalls;
-  log.warn(`ignoring invalid parallel_tool_calls param: ${summary}`);
+
+  // Last wrapper by design: capture the final request payload shape after all
+  // OpenClaw compatibility/mutation wrappers, without storing prompt/body data.
+  ctx.agent.streamFn = createProviderEnvelopeCaptureWrapper(ctx.agent.streamFn);
 }
 
 /**

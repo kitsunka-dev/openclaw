@@ -278,6 +278,7 @@ export function createSubagentRunManager(params: {
     attachmentsDir?: string;
     attachmentsRootDir?: string;
     retainAttachmentsOnKeep?: boolean;
+    initialResultText?: string;
   }) => {
     const now = Date.now();
     const cfg = params.loadConfig();
@@ -318,6 +319,8 @@ export function createSubagentRunManager(params: {
       attachmentsDir: registerParams.attachmentsDir,
       attachmentsRootDir: registerParams.attachmentsRootDir,
       retainAttachmentsOnKeep: registerParams.retainAttachmentsOnKeep,
+      frozenResultText: registerParams.initialResultText?.trim() || undefined,
+      frozenResultCapturedAt: registerParams.initialResultText?.trim() ? now : undefined,
     });
     try {
       createRunningTaskRun({

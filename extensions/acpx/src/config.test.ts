@@ -97,6 +97,34 @@ describe("acpx plugin config parsing", () => {
     expect(resolved.stripProviderAuthEnvVars).toBe(false);
   });
 
+  it("accepts stripProviderAuthEnvVars override for custom acpx commands", () => {
+    const command = "/home/user/repos/acpx/dist/cli.js";
+    const resolved = resolveAcpxPluginConfig({
+      rawConfig: {
+        command,
+        stripProviderAuthEnvVars: true,
+      },
+      workspaceDir: "/tmp/workspace",
+    });
+
+    expect(resolved.command).toBe(path.resolve(command));
+    expect(resolved.allowPluginLocalInstall).toBe(false);
+    expect(resolved.stripProviderAuthEnvVars).toBe(true);
+  });
+
+  it("accepts stripProviderAuthEnvVars override for bundled acpx commands", () => {
+    const resolved = resolveAcpxPluginConfig({
+      rawConfig: {
+        stripProviderAuthEnvVars: false,
+      },
+      workspaceDir: "/tmp/workspace",
+    });
+
+    expect(resolved.command).toBe(ACPX_BUNDLED_BIN);
+    expect(resolved.allowPluginLocalInstall).toBe(true);
+    expect(resolved.stripProviderAuthEnvVars).toBe(false);
+  });
+
   it("resolves relative command paths against workspace directory", () => {
     const resolved = resolveAcpxPluginConfig({
       rawConfig: {
@@ -267,6 +295,17 @@ describe("acpx plugin config parsing", () => {
         workspaceDir: "/tmp/workspace",
       }),
     ).toThrow("strictWindowsCmdWrapper must be a boolean");
+  });
+
+  it("rejects non-boolean stripProviderAuthEnvVars", () => {
+    expect(() =>
+      resolveAcpxPluginConfig({
+        rawConfig: {
+          stripProviderAuthEnvVars: "yes",
+        },
+        workspaceDir: "/tmp/workspace",
+      }),
+    ).toThrow("stripProviderAuthEnvVars must be a boolean");
   });
 
   it("keeps the runtime json schema in sync with the manifest config schema", () => {

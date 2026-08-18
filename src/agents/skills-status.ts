@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import type { OpenClawConfig } from "../config/config.js";
 import { evaluateEntryRequirementsForCurrentPlatform } from "../shared/entry-status.js";
@@ -49,11 +50,112 @@ export type SkillStatusEntry = {
   install: SkillInstallOption[];
 };
 
+export type SkillRootStatus = {
+  path: string;
+  exists: boolean;
+  readable: boolean;
+  skillDirs: number;
+  error?: string;
+};
+
 export type SkillStatusReport = {
   workspaceDir: string;
   managedSkillsDir: string;
   skills: SkillStatusEntry[];
+  roots: SkillRootStatus[];
+  errors: string[];
+  checkedAt: string;
 };
+
+
+function scanSkillRootStatus(rootPath: string): SkillRootStatus {
+  try {
+    const entries = fs.readdirSync(rootPath, { withFileTypes: true });
+    const skillDirs = entries.filter(
+      (entry) => entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules",
+    ).length;
+    return { path: rootPath, exists: true, readable: true, skillDirs };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      path: rootPath,
+      exists: !message.includes("ENOENT"),
+      readable: false,
+      skillDirs: 0,
+      error: message,
+    };
+  }
+}
+
+function uniqueRoots(roots: Array<string | undefined>): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const root of roots) {
+    if (!root) {
+      continue;
+    }
+    const normalized = path.resolve(root);
+    if (seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function resolveExistingWorkspaceSkillRoots(workspaceDir: string): string[] {
+  const candidates = [
+    path.join(workspaceDir, "skills"),
+    path.join(workspaceDir, "mizi-skills"),
+    path.join(workspaceDir, "mizi-ai-skills"),
+    path.join(workspaceDir, "mizi-agents", "skills"),
+    path.join(workspaceDir, ".agents", "skills"),
+  ];
+  return candidates.filter((candidate) => {
+    try {
+      return fs.statSync(candidate).isDirectory();
+    } catch {
+      return false;
+    }
+  });
+}
+
+function resolveExistingExtensionSkillRoots(openclawRoot: string): string[] {
+  const extensionsDir = path.join(openclawRoot, "extensions");
+  try {
+    return fs
+      .readdirSync(extensionsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => path.join(extensionsDir, entry.name, "skills"))
+      .filter((candidate) => {
+        try {
+          return fs.statSync(candidate).isDirectory();
+        } catch {
+          return false;
+        }
+      });
+  } catch {
+    return [];
+  }
+}
+
+function resolveStatusRoots(params: {
+  workspaceDir: string;
+  managedSkillsDir: string;
+  bundledSkillsDir?: string;
+  skillEntries: SkillEntry[];
+}): string[] {
+  void params.skillEntries;
+  const openclawRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..");
+  return uniqueRoots([
+    ...resolveExistingWorkspaceSkillRoots(params.workspaceDir),
+    params.managedSkillsDir,
+    params.bundledSkillsDir,
+    ...resolveExistingExtensionSkillRoots(openclawRoot),
+    ...(process.env.OPENCLAW_EXTRA_SKILL_ROOTS ?? "").split(path.delimiter),
+  ]);
+}
 
 function resolveSkillKey(entry: SkillEntry): string {
   return entry.metadata?.skillKey ?? entry.skill.name;
@@ -244,11 +346,23 @@ export function buildWorkspaceSkillStatus(
       bundledSkillsDir: bundledContext.dir,
     });
   const prefs = resolveSkillsInstallPreferences(opts?.config);
+  const roots = resolveStatusRoots({
+    workspaceDir,
+    managedSkillsDir,
+    bundledSkillsDir: bundledContext.dir,
+    skillEntries,
+  }).map(scanSkillRootStatus);
+  const errors = roots
+    .filter((root) => root.exists && !root.readable)
+    .map((root) => `${root.path}: ${root.error ?? "unreadable"}`);
   return {
     workspaceDir,
     managedSkillsDir,
     skills: skillEntries.map((entry) =>
       buildSkillStatus(entry, opts?.config, prefs, opts?.eligibility, bundledContext.names),
     ),
+    roots,
+    errors,
+    checkedAt: new Date().toISOString(),
   };
 }

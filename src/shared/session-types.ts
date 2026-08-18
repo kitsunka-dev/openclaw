@@ -11,6 +11,38 @@ export type GatewayAgentModel = {
   fallbacks?: string[];
 };
 
+export type GatewayOwnerModeAcpLane = {
+  id: string;
+  status: "working" | "forbidden";
+  reason?: string;
+};
+
+export type GatewayOwnerModeSummary = {
+  enabled: boolean;
+  productionBrain: string;
+  workspace: string;
+  sessionCanon: string;
+  subagents: {
+    allowAny: boolean;
+    allowedAgents: string[];
+    maxConcurrent?: number;
+    maxChildrenPerAgent?: number;
+    maxSpawnDepth?: number;
+    requireAgentId?: boolean;
+  };
+  agentToAgent: {
+    enabled: boolean;
+    allow: string[];
+    sessionsVisibility: string;
+  };
+  acp: {
+    backend?: string;
+    defaultAgent?: string;
+    allowedAgents: string[];
+    lanes: GatewayOwnerModeAcpLane[];
+  };
+};
+
 export type GatewayAgentRow = {
   id: string;
   name?: string;

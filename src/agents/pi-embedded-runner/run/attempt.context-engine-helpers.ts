@@ -1,7 +1,25 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import type { ContextEngine, ContextEngineRuntimeContext } from "../../../context-engine/types.js";
+import type {
+  AssembleResult,
+  ContextEngine,
+  ContextEngineRuntimeContext,
+} from "../../../context-engine/types.js";
 
 export type AttemptContextEngine = ContextEngine;
+
+export function sanitizeAssembleResultSystemPromptAddition(result: AssembleResult): AssembleResult {
+  if (!result.systemPromptAddition) {
+    return result;
+  }
+  if (result.systemPromptAdditionTrust === "trusted") {
+    return result;
+  }
+  return {
+    ...result,
+    systemPromptAddition: undefined,
+    systemPromptAdditionTrust: undefined,
+  };
+}
 
 export async function runAttemptContextEngineBootstrap(params: {
   hadSessionFile: boolean;
@@ -62,7 +80,7 @@ export async function assembleAttemptContextEngine(params: {
   if (!params.contextEngine) {
     return undefined;
   }
-  return await params.contextEngine.assemble({
+  const assembled = await params.contextEngine.assemble({
     sessionId: params.sessionId,
     sessionKey: params.sessionKey,
     messages: params.messages,
@@ -70,6 +88,7 @@ export async function assembleAttemptContextEngine(params: {
     model: params.modelId,
     ...(params.prompt !== undefined ? { prompt: params.prompt } : {}),
   });
+  return sanitizeAssembleResultSystemPromptAddition(assembled);
 }
 
 export async function finalizeAttemptContextEngineTurn(params: {

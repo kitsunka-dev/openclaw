@@ -2,6 +2,7 @@ import type { ChatType } from "../channels/chat-type.js";
 import type { SessionEntry } from "../config/sessions.js";
 import type {
   GatewayAgentRow as SharedGatewayAgentRow,
+  GatewayOwnerModeSummary as SharedGatewayOwnerModeSummary,
   SessionsListResultBase,
   SessionsPatchResultBase,
 } from "../shared/session-types.js";
@@ -67,6 +68,7 @@ export type GatewaySessionRow = {
 };
 
 export type GatewayAgentRow = SharedGatewayAgentRow;
+export type GatewayOwnerModeSummary = SharedGatewayOwnerModeSummary;
 
 export type SessionPreviewItem = {
   role: "user" | "assistant" | "tool" | "system" | "other";

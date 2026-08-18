@@ -120,7 +120,10 @@ function isInsideFence(fenceSpans: Array<{ start: number; end: number }>, offset
   return fenceSpans.some((span) => offset >= span.start && offset < span.end);
 }
 
-export function splitMediaFromOutput(raw: string): {
+export function splitMediaFromOutput(
+  raw: string,
+  options: { mediaTokens?: boolean } = {},
+): {
   text: string;
   mediaUrls?: string[];
   mediaUrl?: string; // legacy first item for backward compatibility
@@ -132,7 +135,8 @@ export function splitMediaFromOutput(raw: string): {
   if (!trimmedRaw.trim()) {
     return { text: "" };
   }
-  const mayContainMediaToken = /media:/i.test(trimmedRaw);
+  const parseMediaTokens = options.mediaTokens !== false;
+  const mayContainMediaToken = parseMediaTokens && /media:/i.test(trimmedRaw);
   const mayContainAudioTag = trimmedRaw.includes("[[");
   if (!mayContainMediaToken && !mayContainAudioTag) {
     return { text: trimmedRaw };
@@ -159,7 +163,7 @@ export function splitMediaFromOutput(raw: string): {
     }
 
     const trimmedStart = line.trimStart();
-    if (!trimmedStart.startsWith("MEDIA:")) {
+    if (!parseMediaTokens || !trimmedStart.startsWith("MEDIA:")) {
       keptLines.push(line);
       lineOffset += line.length + 1; // +1 for newline
       continue;

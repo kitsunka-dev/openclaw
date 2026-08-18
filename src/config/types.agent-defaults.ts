@@ -169,6 +169,19 @@ export type AgentDefaultsConfig = {
   contextTokens?: number;
   /** Optional CLI backends for text-only fallback (claude-cli, etc.). */
   cliBackends?: Record<string, CliBackendConfig>;
+  /** Opt-in pressure retry for actionable provider/capability refusals before model fallback. */
+  refusalPressure?: {
+    /** Enable refusal pressure retry. Default: false. */
+    enabled?: boolean;
+    /** Retry once on the same model before fallback. Default: true. */
+    retryOnce?: boolean;
+    /** Max pressure retries per session/provider/model window. Default: 3. */
+    maxPerSession?: number;
+    /** Rate-limit window in milliseconds. Default: 10 minutes. */
+    windowMs?: number;
+    /** Human-readable rate-limit window (e.g. 10m, 30s). Used when windowMs is unset. */
+    window?: string;
+  };
   /** Opt-in: prune old tool results from the LLM context to reduce token usage. */
   contextPruning?: AgentContextPruningConfig;
   /** LLM timeout configuration. */

@@ -93,6 +93,7 @@ export type AcpxPluginConfig = {
   nonInteractivePermissions?: AcpxNonInteractivePermissionPolicy;
   pluginToolsMcpBridge?: boolean;
   strictWindowsCmdWrapper?: boolean;
+  stripProviderAuthEnvVars?: boolean;
   timeoutSeconds?: number;
   queueOwnerTtlSeconds?: number;
   mcpServers?: Record<string, McpServerConfig>;
@@ -161,6 +162,9 @@ const AcpxPluginConfigSchema = z.strictObject({
   pluginToolsMcpBridge: z.boolean({ error: "pluginToolsMcpBridge must be a boolean" }).optional(),
   strictWindowsCmdWrapper: z
     .boolean({ error: "strictWindowsCmdWrapper must be a boolean" })
+    .optional(),
+  stripProviderAuthEnvVars: z
+    .boolean({ error: "stripProviderAuthEnvVars must be a boolean" })
     .optional(),
   timeoutSeconds: z
     .number({ error: "timeoutSeconds must be a number >= 0.001" })
@@ -296,7 +300,8 @@ export function resolveAcpxPluginConfig(params: {
     workspaceDir: params.workspaceDir,
   });
   const allowPluginLocalInstall = command === ACPX_BUNDLED_BIN;
-  const stripProviderAuthEnvVars = command === ACPX_BUNDLED_BIN;
+  const stripProviderAuthEnvVars =
+    normalized.stripProviderAuthEnvVars ?? command === ACPX_BUNDLED_BIN;
   const configuredExpectedVersion = normalized.expectedVersion;
   const expectedVersion =
     configuredExpectedVersion === ACPX_VERSION_ANY

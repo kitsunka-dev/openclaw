@@ -588,6 +588,7 @@ export function registerSubagentRun(params: {
   attachmentsDir?: string;
   attachmentsRootDir?: string;
   retainAttachmentsOnKeep?: boolean;
+  initialResultText?: string;
 }) {
   subagentRunManager.registerSubagentRun(params);
 }

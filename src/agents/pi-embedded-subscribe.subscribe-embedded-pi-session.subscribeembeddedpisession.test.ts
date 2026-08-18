@@ -328,7 +328,7 @@ describe("subscribeEmbeddedPiSession", () => {
     expect(payloads[0]?.text).toBe("MEDIA:");
   });
 
-  it("emits agent events when media arrives without text", () => {
+  it("does not promote assistant-authored MEDIA text into outbound media", () => {
     const { emit, onAgentEvent } = createAgentEventHarness();
 
     emit({ type: "message_start", message: { role: "assistant" } });
@@ -336,8 +336,8 @@ describe("subscribeEmbeddedPiSession", () => {
 
     const payloads = extractAgentEventPayloads(onAgentEvent.mock.calls);
     expect(payloads).toHaveLength(1);
-    expect(payloads[0]?.text).toBe("");
-    expect(payloads[0]?.mediaUrls).toEqual(["https://example.com/a.png"]);
+    expect(payloads[0]?.text).toBe("MEDIA: https://example.com/a.png");
+    expect(payloads[0]?.mediaUrls).toBeUndefined();
   });
 
   it("keeps unresolved mutating failure when an unrelated tool succeeds", () => {

@@ -33,6 +33,9 @@
       "strictWindowsCmdWrapper": {
         "type": "boolean"
       },
+      "stripProviderAuthEnvVars": {
+        "type": "boolean"
+      },
       "timeoutSeconds": {
         "type": "number",
         "minimum": 0.001
@@ -96,6 +99,11 @@
     "strictWindowsCmdWrapper": {
       "label": "Strict Windows cmd Wrapper",
       "help": "Enabled by default. On Windows, reject unresolved .cmd/.bat wrappers instead of shell fallback. Disable only for compatibility with non-standard wrappers.",
+      "advanced": true
+    },
+    "stripProviderAuthEnvVars": {
+      "label": "Strip Provider Auth Env Vars",
+      "help": "Enabled for bundled acpx by default. Enable for custom acpx commands when agent CLIs should use their own auth files instead of inherited provider API-key environment variables.",
       "advanced": true
     },
     "timeoutSeconds": {

@@ -241,14 +241,16 @@ describe("AcpxRuntime", () => {
     expect(resumeArgs[resumeFlagIndex + 1]).toBe(resumeSessionId);
   });
 
-  it("retains dead named sessions when status only reports queue owner unavailable", async () => {
+  it("retains idle named sessions when status reports queue owner unavailable", async () => {
+    const sessionKey = "agent:codex:acp:dead-session";
     await expectSessionEnsureFallback({
-      sessionKey: "agent:codex:acp:dead-session",
+      sessionKey,
       env: {
         MOCK_ACPX_STATUS_STATUS: "dead",
         MOCK_ACPX_STATUS_SUMMARY: "queue owner unavailable",
       },
       expectNewAfterStatus: false,
+      expectedRecordId: "rec-" + sessionKey,
     });
   });
 
@@ -275,16 +277,17 @@ describe("AcpxRuntime", () => {
     });
   });
 
-  it("retains the named session after ensure failure when status only reports queue owner unavailable", async () => {
+  it("reuses idle named sessions after ensure failure when status reports queue owner unavailable", async () => {
+    const sessionKey = "agent:codex:acp:ensure-fallback-dead";
     await expectSessionEnsureFallback({
-      sessionKey: "agent:codex:acp:ensure-fallback-dead",
+      sessionKey,
       env: {
         MOCK_ACPX_ENSURE_EXIT_1: "1",
         MOCK_ACPX_STATUS_STATUS: "dead",
         MOCK_ACPX_STATUS_SUMMARY: "queue owner unavailable",
       },
       expectNewAfterStatus: false,
-      expectedRecordId: "rec-agent:codex:acp:ensure-fallback-dead",
+      expectedRecordId: "rec-" + sessionKey,
     });
   });
 

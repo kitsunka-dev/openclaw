@@ -119,13 +119,10 @@ function summarizeLogText(text: string, maxChars = 240): string {
   return `${normalized.slice(0, maxChars)}...`;
 }
 
-function shouldRetainNamedSessionForDeadStatus(detail: AcpxJsonObject | undefined): boolean {
-  const status = asTrimmedString(detail?.status)?.toLowerCase();
-  if (status !== "dead") {
-    return false;
-  }
-  const summary = asTrimmedString(detail?.summary)?.toLowerCase();
-  return summary?.includes("queue owner unavailable") ?? false;
+function isRecoverableDeadQueueOwnerStatus(params: { status?: string; summary?: string }): boolean {
+  const status = asTrimmedString(params.status)?.toLowerCase();
+  const summary = asTrimmedString(params.summary)?.toLowerCase() ?? "";
+  return status === "dead" && summary.includes("queue owner unavailable");
 }
 
 function findSessionIdentifierEvent(events: AcpxJsonObject[]): AcpxJsonObject | undefined {
@@ -367,9 +364,9 @@ export class AcpxRuntime implements AcpRuntime {
     const status = asTrimmedString(detail?.status)?.toLowerCase();
     if (status === "dead") {
       const summary = summarizeLogText(asOptionalString(detail?.summary) ?? "");
-      if (shouldRetainNamedSessionForDeadStatus(detail)) {
+      if (isRecoverableDeadQueueOwnerStatus({ status, summary })) {
         this.logger?.warn?.(
-          `acpx ensureSession retaining dead named session with recoverable status: session=${params.sessionName} cwd=${params.cwd} status=${status} summary=${summary || "<empty>"}`,
+          `acpx ensureSession retaining idle named session: session=${params.sessionName} cwd=${params.cwd} status=${status} summary=${summary || "<empty>"}`,
         );
         return false;
       }
@@ -430,14 +427,14 @@ export class AcpxRuntime implements AcpRuntime {
     const status = asTrimmedString(detail?.status)?.toLowerCase();
     if (status === "dead") {
       const summary = summarizeLogText(asOptionalString(detail?.summary) ?? "");
-      if (shouldRetainNamedSessionForDeadStatus(detail)) {
+      if (isRecoverableDeadQueueOwnerStatus({ status, summary })) {
         this.logger?.warn?.(
-          `acpx ensureSession retaining dead named session after ensure failure with recoverable status: session=${params.sessionName} cwd=${params.cwd} status=${status} summary=${summary || "<empty>"}`,
+          `acpx ensureSession reusing idle named session after ensure failure: session=${params.sessionName} cwd=${params.cwd} status=${status} summary=${summary || "<empty>"}`,
         );
         return events;
       }
       this.logger?.warn?.(
-        `acpx ensureSession replacing dead named session after ensure failure: session=${params.sessionName} cwd=${params.cwd}`,
+        `acpx ensureSession replacing dead named session after ensure failure: session=${params.sessionName} cwd=${params.cwd} status=${status} summary=${summary || "<empty>"}`,
       );
       return await this.createNamedSession({
         agent: params.agent,

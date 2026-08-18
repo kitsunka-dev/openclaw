@@ -52,10 +52,15 @@ export function shouldAllowSilentLocalPairing(params: {
   isWebchat: boolean;
   reason: "not-paired" | "role-upgrade" | "scope-upgrade" | "metadata-upgrade";
 }): boolean {
+  // Owner-mode hardening: loopback by itself is not a trust boundary. Backend/CLI
+  // clients on localhost must not silently create or widen operator credentials.
+  // Keep silent onboarding only for browser-origin Control UI/WebChat fresh pairing;
+  // every scope/role/metadata upgrade must require explicit pairing approval.
   return (
     params.isLocalClient &&
-    (!params.hasBrowserOriginHeader || params.isControlUi || params.isWebchat) &&
-    (params.reason === "not-paired" || params.reason === "scope-upgrade")
+    params.hasBrowserOriginHeader &&
+    (params.isControlUi || params.isWebchat) &&
+    params.reason === "not-paired"
   );
 }
 

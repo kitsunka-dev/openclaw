@@ -53,6 +53,14 @@ import {
 } from "./agent-runner-utils.js";
 import { type BlockReplyPipeline } from "./block-reply-pipeline.js";
 import type { FollowupRun } from "./queue.js";
+import {
+  buildRefusalPressurePrompt,
+  classifyRefusalPayloads,
+  createRefusalFailoverError,
+  logRefusalPressureEvent,
+  resolveRefusalPressureSettings,
+  shouldAllowRefusalPressureRetry,
+} from "./refusal-router.js";
 import { createBlockReplyDeliveryHandler } from "./reply-delivery.js";
 import { createReplyMediaPathNormalizer } from "./reply-media-paths.runtime.js";
 import type { TypingSignaler } from "./typing-mode.js";
@@ -342,6 +350,105 @@ export async function runAgentTurnWithFallback(params: {
                   });
                 }
 
+                const refusalDecision = classifyRefusalPayloads(result.payloads);
+                const refusalPressure = resolveRefusalPressureSettings(
+                  params.followupRun.run.config,
+                );
+                if (refusalDecision.shouldReroute) {
+                  logRefusalPressureEvent({
+                    event: "refusal_detected",
+                    provider,
+                    model,
+                    runId,
+                    decision: refusalDecision,
+                  });
+                }
+                if (
+                  refusalDecision.shouldReroute &&
+                  refusalPressure.enabled &&
+                  refusalPressure.retryOnce
+                ) {
+                  const pressureAllowance = shouldAllowRefusalPressureRetry({
+                    settings: refusalPressure,
+                    provider,
+                    model,
+                    sessionKey: params.sessionKey,
+                  });
+                  if (!pressureAllowance.allowed) {
+                    logRefusalPressureEvent({
+                      event: "pressure_retry_throttled",
+                      provider,
+                      model,
+                      runId,
+                      decision: refusalDecision,
+                    });
+                    throw createRefusalFailoverError({
+                      provider,
+                      model,
+                      decision: refusalDecision,
+                    });
+                  }
+                  logRefusalPressureEvent({
+                    event: "pressure_retry_started",
+                    provider,
+                    model,
+                    runId,
+                    decision: refusalDecision,
+                  });
+                  const retryResult = await runCliAgent({
+                    sessionId: params.followupRun.run.sessionId,
+                    sessionKey: params.sessionKey,
+                    agentId: params.followupRun.run.agentId,
+                    sessionFile: params.followupRun.run.sessionFile,
+                    workspaceDir: params.followupRun.run.workspaceDir,
+                    config: params.followupRun.run.config,
+                    prompt: buildRefusalPressurePrompt({
+                      originalPrompt: params.commandBody,
+                      decision: refusalDecision,
+                    }),
+                    provider,
+                    model,
+                    thinkLevel: params.followupRun.run.thinkLevel,
+                    timeoutMs: params.followupRun.run.timeoutMs,
+                    runId,
+                    extraSystemPrompt: params.followupRun.run.extraSystemPrompt,
+                    ownerNumbers: params.followupRun.run.ownerNumbers,
+                    cliSessionId: cliSessionBinding?.sessionId,
+                    cliSessionBinding,
+                    authProfileId,
+                    bootstrapPromptWarningSignaturesSeen,
+                    bootstrapPromptWarningSignature:
+                      bootstrapPromptWarningSignaturesSeen[
+                        bootstrapPromptWarningSignaturesSeen.length - 1
+                      ],
+                    images: params.opts?.images,
+                    imageOrder: params.opts?.imageOrder,
+                  });
+                  const retryRefusalDecision = classifyRefusalPayloads(retryResult.payloads);
+                  if (retryRefusalDecision.shouldReroute) {
+                    logRefusalPressureEvent({
+                      event: "pressure_retry_failed_fallback",
+                      provider,
+                      model,
+                      runId,
+                      decision: retryRefusalDecision,
+                    });
+                    throw createRefusalFailoverError({
+                      provider,
+                      model,
+                      decision: retryRefusalDecision,
+                    });
+                  }
+                  logRefusalPressureEvent({
+                    event: "pressure_retry_succeeded",
+                    provider,
+                    model,
+                    runId,
+                    decision: refusalDecision,
+                  });
+                  return retryResult;
+                }
+
                 emitAgentEvent({
                   runId,
                   stream: "lifecycle",
@@ -564,6 +671,145 @@ export async function runAgentTurnWithFallback(params: {
               bootstrapPromptWarningSignaturesSeen = resolveBootstrapWarningSignaturesSeen(
                 result.meta?.systemPromptReport,
               );
+              const refusalDecision = classifyRefusalPayloads(result.payloads);
+              const refusalPressure = resolveRefusalPressureSettings(params.followupRun.run.config);
+              if (refusalDecision.shouldReroute) {
+                logRefusalPressureEvent({
+                  event: "refusal_detected",
+                  provider,
+                  model,
+                  runId,
+                  decision: refusalDecision,
+                });
+              }
+              if (
+                refusalDecision.shouldReroute &&
+                refusalPressure.enabled &&
+                refusalPressure.retryOnce
+              ) {
+                logRefusalPressureEvent({
+                  event: "pressure_retry_started",
+                  provider,
+                  model,
+                  runId,
+                  decision: refusalDecision,
+                });
+                const retryResult = await runEmbeddedPiAgent({
+                  ...embeddedContext,
+                  allowGatewaySubagentBinding: true,
+                  trigger: params.isHeartbeat ? "heartbeat" : "user",
+                  groupId: resolveGroupSessionKey(params.sessionCtx)?.id,
+                  groupChannel:
+                    params.sessionCtx.GroupChannel?.trim() ??
+                    params.sessionCtx.GroupSubject?.trim(),
+                  groupSpace: params.sessionCtx.GroupSpace?.trim() ?? undefined,
+                  ...senderContext,
+                  ...runBaseParams,
+                  prompt: buildRefusalPressurePrompt({
+                    originalPrompt: params.commandBody,
+                    decision: refusalDecision,
+                  }),
+                  extraSystemPrompt: params.followupRun.run.extraSystemPrompt,
+                  toolResultFormat: (() => {
+                    const channel = resolveMessageChannel(
+                      params.sessionCtx.Surface,
+                      params.sessionCtx.Provider,
+                    );
+                    if (!channel) {
+                      return "markdown";
+                    }
+                    return isMarkdownCapableMessageChannel(channel) ? "markdown" : "plain";
+                  })(),
+                  suppressToolErrorWarnings: params.opts?.suppressToolErrorWarnings,
+                  bootstrapContextMode: params.opts?.bootstrapContextMode,
+                  bootstrapContextRunKind: params.opts?.isHeartbeat ? "heartbeat" : "default",
+                  images: params.opts?.images,
+                  imageOrder: params.opts?.imageOrder,
+                  abortSignal: params.opts?.abortSignal,
+                  blockReplyBreak: params.resolvedBlockStreamingBreak,
+                  blockReplyChunking: params.blockReplyChunking,
+                  onPartialReply: async (payload) => {
+                    const textForTyping = await handlePartialForTyping(payload);
+                    if (!params.opts?.onPartialReply || textForTyping === undefined) {
+                      return;
+                    }
+                    await params.opts.onPartialReply({
+                      text: textForTyping,
+                      mediaUrls: payload.mediaUrls,
+                    });
+                  },
+                  onAssistantMessageStart: async () => {
+                    await params.typingSignals.signalMessageStart();
+                    await params.opts?.onAssistantMessageStart?.();
+                  },
+                  onReasoningStream:
+                    params.typingSignals.shouldStartOnReasoning || params.opts?.onReasoningStream
+                      ? async (payload) => {
+                          if (params.followupRun.run.silentExpected) {
+                            return;
+                          }
+                          await params.typingSignals.signalReasoningDelta();
+                          await params.opts?.onReasoningStream?.({
+                            text: payload.text,
+                            mediaUrls: payload.mediaUrls,
+                          });
+                        }
+                      : undefined,
+                  onReasoningEnd: params.opts?.onReasoningEnd,
+                  onAgentEvent: async (evt) => {
+                    const hasLifecyclePhase =
+                      evt.stream === "lifecycle" && typeof evt.data.phase === "string";
+                    if (evt.stream !== "lifecycle" || hasLifecyclePhase) {
+                      notifyAgentRunStart();
+                    }
+                    if (evt.stream === "tool") {
+                      const phase = typeof evt.data.phase === "string" ? evt.data.phase : "";
+                      const name = typeof evt.data.name === "string" ? evt.data.name : undefined;
+                      if (phase === "start" || phase === "update") {
+                        await params.typingSignals.signalToolStart();
+                        await params.opts?.onToolStart?.({ name, phase });
+                      }
+                    }
+                  },
+                  onBlockReply: blockReplyHandler,
+                  onBlockReplyFlush:
+                    params.blockStreamingEnabled && blockReplyPipeline
+                      ? async () => {
+                          await blockReplyPipeline.flush({ force: true });
+                        }
+                      : undefined,
+                  shouldEmitToolResult: params.shouldEmitToolResult,
+                  shouldEmitToolOutput: params.shouldEmitToolOutput,
+                  bootstrapPromptWarningSignaturesSeen,
+                  bootstrapPromptWarningSignature:
+                    bootstrapPromptWarningSignaturesSeen[
+                      bootstrapPromptWarningSignaturesSeen.length - 1
+                    ],
+                });
+                const retryRefusalDecision = classifyRefusalPayloads(retryResult.payloads);
+                if (retryRefusalDecision.shouldReroute) {
+                  logRefusalPressureEvent({
+                    event: "pressure_retry_failed_fallback",
+                    provider,
+                    model,
+                    runId,
+                    decision: retryRefusalDecision,
+                  });
+                  throw createRefusalFailoverError({
+                    provider,
+                    model,
+                    decision: retryRefusalDecision,
+                  });
+                }
+                logRefusalPressureEvent({
+                  event: "pressure_retry_succeeded",
+                  provider,
+                  model,
+                  runId,
+                  decision: refusalDecision,
+                });
+                return retryResult;
+              }
               const resultCompactionCount = Math.max(
                 0,
                 result.meta?.agentMeta?.compactionCount ?? 0,

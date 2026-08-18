@@ -4,7 +4,7 @@ import type { SkillMessageMap } from "../controllers/skills.ts";
 import { clampText } from "../format.ts";
 import { resolveSafeExternalUrl } from "../open-external-url.ts";
 import type { SkillStatusEntry, SkillStatusReport } from "../types.ts";
-import { groupSkills } from "./skills-grouping.ts";
+import { groupSkills, inferSkillCategory, inferSkillLane } from "./skills-grouping.ts";
 import {
   computeSkillMissing,
   computeSkillReasons,
@@ -51,6 +51,58 @@ const STATUS_TABS: StatusTabDef[] = [
   { id: "disabled", label: "Disabled" },
 ];
 
+
+function renderSkillSearchText(skill: SkillStatusEntry): string {
+  const missing = computeSkillMissing(skill).join(" ");
+  return [
+    skill.name,
+    skill.description,
+    skill.source,
+    skill.filePath,
+    inferSkillCategory(skill),
+    inferSkillLane(skill),
+    missing,
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function renderSourceKind(skill: SkillStatusEntry): string {
+  const filePath = skill.filePath.toLowerCase();
+  if (filePath.includes("/workspace/mizi-") || filePath.includes("/mizi-")) {
+    return "mizi";
+  }
+  if (filePath.includes("/workspace/skills/")) {
+    return "workspace";
+  }
+  if (filePath.includes("/extensions/")) {
+    return "extension";
+  }
+  if (skill.bundled || skill.source === "openclaw-bundled") {
+    return "built-in";
+  }
+  if (skill.source === "openclaw-managed") {
+    return "managed";
+  }
+  return skill.source || "unknown";
+}
+
+function renderSkillStatusLabel(skill: SkillStatusEntry): string {
+  if (skill.disabled) {
+    return "disabled";
+  }
+  if (skill.blockedByAllowlist) {
+    return "blocked by allowlist";
+  }
+  if (!skill.filePath || !skill.description) {
+    return "broken metadata";
+  }
+  if (skill.eligible) {
+    return "ready";
+  }
+  return "missing requirements";
+}
+
 function skillMatchesStatus(skill: SkillStatusEntry, status: SkillsStatusFilter): boolean {
   switch (status) {
     case "all":
@@ -80,7 +132,11 @@ export function renderSkills(props: SkillsProps) {
     "needs-setup": 0,
     disabled: 0,
   };
+  let brokenCount = 0;
   for (const s of skills) {
+    if (!s.filePath || !s.description) {
+      brokenCount++;
+    }
     if (s.disabled) {
       statusCounts.disabled++;
     } else if (s.eligible) {
@@ -97,9 +153,7 @@ export function renderSkills(props: SkillsProps) {
 
   const filter = props.filter.trim().toLowerCase();
   const filtered = filter
-    ? afterStatus.filter((skill) =>
-        [skill.name, skill.description, skill.source].join(" ").toLowerCase().includes(filter),
-      )
+    ? afterStatus.filter((skill) => renderSkillSearchText(skill).includes(filter))
     : afterStatus;
   const groups = groupSkills(filtered);
 
@@ -111,8 +165,8 @@ export function renderSkills(props: SkillsProps) {
     <section class="card">
       <div class="row" style="justify-content: space-between;">
         <div>
-          <div class="card-title">Skills</div>
-          <div class="card-sub">Installed skills and their status.</div>
+          <div class="card-title">Skills Catalog</div>
+          <div class="card-sub">Live OpenClaw skills from real VPS roots — no mock-only data.</div>
         </div>
         <button
           class="btn"
@@ -122,6 +176,46 @@ export function renderSkills(props: SkillsProps) {
           ${props.loading ? "Loading\u2026" : "Refresh"}
         </button>
       </div>
+
+      <div class="callout" style="margin-top: 14px;">
+        <div style="font-weight: 700; margin-bottom: 4px;">Owner Mode truth model</div>
+        <div>Shows the engine's live skill status plus filesystem roots checked by the gateway. Trust is raw source/SKILL.md/operator judgement; no fake cryptographic safety or platform fantasy.</div>
+      </div>
+
+      <div class="usage-summary-grid" style="margin-top: 14px;">
+        <div class="usage-summary-card"><div class="usage-summary-label">Ready</div><div class="usage-summary-value">${statusCounts.ready}</div></div>
+        <div class="usage-summary-card"><div class="usage-summary-label">Needs setup</div><div class="usage-summary-value">${statusCounts["needs-setup"]}</div></div>
+        <div class="usage-summary-card"><div class="usage-summary-label">Disabled</div><div class="usage-summary-value">${statusCounts.disabled}</div></div>
+        <div class="usage-summary-card"><div class="usage-summary-label">Broken</div><div class="usage-summary-value">${brokenCount}</div></div>
+      </div>
+
+      ${props.report?.roots?.length
+        ? html`<div class="agent-skills-groups" style="margin-top: 14px;">
+            <details class="agent-skills-group" open>
+              <summary class="agent-skills-header">
+                <span>Checked skill roots</span>
+                <span class="muted">${props.report.roots.length}</span>
+              </summary>
+              <div class="list">
+                ${props.report.roots.map(
+                  (root) => html`<div class="list-item">
+                    <div class="list-main">
+                      <div class="list-title" style="font-family: var(--mono); font-size: 12px;">${root.path}</div>
+                      <div class="list-sub">exists=${String(root.exists)} · readable=${String(root.readable)} · skillDirs=${root.skillDirs}${root.error ? ` · ${root.error}` : ""}</div>
+                    </div>
+                  </div>`,
+                )}
+              </div>
+            </details>
+          </div>`
+        : nothing}
+
+      ${props.report?.errors?.length
+        ? html`<div class="callout danger" style="margin-top: 12px;">
+            <div style="font-weight: 700; margin-bottom: 4px;">Data source warnings</div>
+            ${props.report.errors.map((error) => html`<div>${error}</div>`)}
+          </div>`
+        : nothing}
 
       <div class="agent-tabs" style="margin-top: 14px;">
         ${STATUS_TABS.map(
@@ -167,8 +261,8 @@ export function renderSkills(props: SkillsProps) {
         ? html`
             <div class="muted" style="margin-top: 16px">
               ${!props.connected && !props.report
-                ? "Not connected to gateway."
-                : "No skills found."}
+                ? "Not connected to gateway. Checked roots and gateway errors will appear after connection."
+                : "No skills found. Data source status is shown above so this page does not fail blank."}
             </div>
           `
         : html`
@@ -207,6 +301,8 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
           <span>${skill.name}</span>
         </div>
         <div class="list-sub">${clampText(skill.description, 140)}</div>
+        <div class="list-sub" style="margin-top: 4px;">${renderSkillStatusLabel(skill)} · ${renderSourceKind(skill)} · ${inferSkillCategory(skill)} · lane: ${inferSkillLane(skill)}</div>
+        <div class="list-sub" style="margin-top: 4px; font-family: var(--mono);">${skill.filePath}</div>
       </div>
       <div
         class="list-meta"
@@ -280,6 +376,7 @@ function renderSkillDetail(skill: SkillStatusEntry, props: SkillsProps) {
             <div style="font-size: 14px; line-height: 1.5; color: var(--text);">
               ${skill.description}
             </div>
+            <div class="muted" style="margin-top: 8px; font-size: 13px;">Status: ${renderSkillStatusLabel(skill)} · source: ${renderSourceKind(skill)} · category: ${inferSkillCategory(skill)} · best-fit lane: ${inferSkillLane(skill)}</div>
             ${renderSkillStatusChips({ skill, showBundledBadge })}
           </div>
 

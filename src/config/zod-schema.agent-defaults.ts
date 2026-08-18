@@ -52,6 +52,16 @@ export const AgentDefaultsSchema = z
     contextTokens: z.number().int().positive().optional(),
     cliBackends: z.record(z.string(), CliBackendSchema).optional(),
     memorySearch: MemorySearchSchema,
+    refusalPressure: z
+      .object({
+        enabled: z.boolean().optional(),
+        retryOnce: z.boolean().optional(),
+        maxPerSession: z.number().int().positive().optional(),
+        windowMs: z.number().int().positive().optional(),
+        window: z.string().optional(),
+      })
+      .strict()
+      .optional(),
     contextPruning: z
       .object({
         mode: z.union([z.literal("off"), z.literal("cache-ttl")]).optional(),

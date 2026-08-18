@@ -7,8 +7,16 @@ export type AssembleResult = {
   messages: AgentMessage[];
   /** Estimated total tokens in assembled context */
   estimatedTokens: number;
-  /** Optional context-engine-provided instructions prepended to the runtime system prompt */
+  /**
+   * Optional context-engine-provided instructions prepended to the runtime system prompt.
+   *
+   * This is a high-authority sink. Engines must explicitly mark additions as
+   * trusted; bare/legacy strings are dropped by the runner instead of being
+   * silently promoted into system authority.
+   */
   systemPromptAddition?: string;
+  /** Trust marker required before `systemPromptAddition` may be prepended. */
+  systemPromptAdditionTrust?: "trusted";
 };
 
 export type CompactResult = {

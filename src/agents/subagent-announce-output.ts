@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { loadConfig } from "../config/config.js";
 import {
@@ -52,6 +55,22 @@ export type AgentWaitResult = {
 export type SubagentRunOutcome = {
   status: "ok" | "error" | "timeout" | "unknown";
   error?: string;
+};
+
+type StoredSubagentRun = {
+  childSessionKey?: unknown;
+  task?: unknown;
+  createdAt?: unknown;
+  endedAt?: unknown;
+};
+
+type ClaudeLogEntry = {
+  type?: unknown;
+  timestamp?: unknown;
+  message?: {
+    role?: unknown;
+    content?: unknown;
+  };
 };
 
 function extractToolResultText(content: unknown): string {
@@ -333,10 +352,181 @@ export async function captureSubagentCompletionReply(
   if (immediate?.trim()) {
     return immediate;
   }
-  return await readLatestSubagentOutputWithRetry({
+  const retried = await readLatestSubagentOutputWithRetry({
     sessionKey,
     maxWaitMs: isFastTestMode() ? 50 : 1_500,
   });
+  if (retried?.trim()) {
+    return retried;
+  }
+  return readClaudeCliCompletionFallback(sessionKey);
+}
+
+function resolveProfileRootForSubagentOutput(sessionKey: string): string | undefined {
+  const explicit = process.env.OPENCLAW_PROFILE_ROOT?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  const cfg = subagentAnnounceOutputDeps.loadConfig();
+  const agentId = resolveAgentIdFromSessionKey(sessionKey);
+  const storePath = resolveStorePath(cfg.session?.store, { agentId });
+  const marker = `${path.sep}agents${path.sep}`;
+  const index = storePath.indexOf(marker);
+  if (index > 0) {
+    return storePath.slice(0, index);
+  }
+  return undefined;
+}
+
+function resolveRunsForChildSession(params: {
+  profileRoot: string;
+  sessionKey: string;
+}): StoredSubagentRun | undefined {
+  const runsPath = path.join(params.profileRoot, "subagents", "runs.json");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(runsPath, "utf-8"));
+  } catch {
+    return undefined;
+  }
+  const rawItems = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === "object" && Array.isArray((parsed as { runs?: unknown }).runs)
+      ? (parsed as { runs: unknown[] }).runs
+      : parsed && typeof parsed === "object" && (parsed as { runs?: unknown }).runs && typeof (parsed as { runs?: unknown }).runs === "object"
+        ? Object.values((parsed as { runs: Record<string, unknown> }).runs)
+        : [];
+  const matches = rawItems.filter(
+    (item): item is StoredSubagentRun =>
+      Boolean(
+        item &&
+          typeof item === "object" &&
+          (item as StoredSubagentRun).childSessionKey === params.sessionKey,
+      ),
+  );
+  return matches.toSorted((a, b) => {
+    const aCreated = typeof a.createdAt === "number" ? a.createdAt : 0;
+    const bCreated = typeof b.createdAt === "number" ? b.createdAt : 0;
+    return bCreated - aCreated;
+  })[0];
+}
+
+function extractClaudeContentText(content: unknown): string {
+  if (typeof content === "string") {
+    return sanitizeTextContent(content);
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  return (
+    extractTextFromChatContent(content, {
+      sanitizeText: sanitizeTextContent,
+      normalizeText: (text) => text,
+      joinWith: "\n",
+    }) ?? ""
+  ).trim();
+}
+
+function readClaudeJsonlCompletionByTask(params: {
+  filePath: string;
+  task: string;
+}): string | undefined {
+  let content: string;
+  try {
+    content = fs.readFileSync(params.filePath, "utf-8");
+  } catch {
+    return undefined;
+  }
+  const taskNeedle = params.task.trim().slice(0, 220);
+  if (!taskNeedle) {
+    return undefined;
+  }
+  let sawTask = false;
+  let latestAssistant = "";
+  for (const line of content.split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+    let parsed: ClaudeLogEntry;
+    try {
+      parsed = JSON.parse(line) as ClaudeLogEntry;
+    } catch {
+      continue;
+    }
+    const role = parsed.message?.role;
+    const text = extractClaudeContentText(parsed.message?.content);
+    if (!text) {
+      continue;
+    }
+    if (role === "user" && text.includes(taskNeedle)) {
+      sawTask = true;
+      latestAssistant = "";
+      continue;
+    }
+    if (sawTask && role === "assistant") {
+      latestAssistant = text;
+    }
+  }
+  return latestAssistant.trim() ? latestAssistant.trim() : undefined;
+}
+
+function readClaudeCliCompletionFallback(sessionKey: string): string | undefined {
+  const profileRoot = resolveProfileRootForSubagentOutput(sessionKey);
+  if (!profileRoot) {
+    return undefined;
+  }
+  const run = resolveRunsForChildSession({ profileRoot, sessionKey });
+  const task = typeof run?.task === "string" ? run.task.trim() : "";
+  if (!task) {
+    return undefined;
+  }
+  const createdAt = typeof run?.createdAt === "number" ? run.createdAt : 0;
+  const endedAt = typeof run?.endedAt === "number" ? run.endedAt : Date.now();
+  const minMtime = createdAt > 0 ? createdAt - 120_000 : 0;
+  const maxMtime = endedAt > 0 ? endedAt + 120_000 : Date.now() + 120_000;
+  const projectsDir = path.join(process.env.HOME || os.homedir(), ".claude", "projects");
+  let projectDirs: fs.Dirent[];
+  try {
+    projectDirs = fs.readdirSync(projectsDir, { withFileTypes: true });
+  } catch {
+    return undefined;
+  }
+  const candidates: Array<{ filePath: string; mtimeMs: number }> = [];
+  for (const projectDir of projectDirs) {
+    if (!projectDir.isDirectory()) {
+      continue;
+    }
+    const dirPath = path.join(projectsDir, projectDir.name);
+    let files: fs.Dirent[];
+    try {
+      files = fs.readdirSync(dirPath, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      if (!file.isFile() || !file.name.endsWith(".jsonl")) {
+        continue;
+      }
+      const filePath = path.join(dirPath, file.name);
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(filePath);
+      } catch {
+        continue;
+      }
+      if (stat.mtimeMs < minMtime || stat.mtimeMs > maxMtime) {
+        continue;
+      }
+      candidates.push({ filePath, mtimeMs: stat.mtimeMs });
+    }
+  }
+  for (const candidate of candidates.toSorted((a, b) => b.mtimeMs - a.mtimeMs)) {
+    const text = readClaudeJsonlCompletionByTask({ filePath: candidate.filePath, task });
+    if (text?.trim()) {
+      return text.trim();
+    }
+  }
+  return undefined;
 }
 
 function describeSubagentOutcome(outcome?: SubagentRunOutcome): string {

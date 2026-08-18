@@ -63,6 +63,17 @@ describe("splitMediaFromOutput", () => {
     expectRejectedMediaPathCase(input);
   });
 
+  it("can disable MEDIA token extraction while still parsing audio tags", () => {
+    const result = splitMediaFromOutput("MEDIA: https://example.com/a.png [[audio_as_voice]]", {
+      mediaTokens: false,
+    });
+
+    expect(result.text).toBe("MEDIA: https://example.com/a.png");
+    expect(result.mediaUrls).toBeUndefined();
+    expect(result.mediaUrl).toBeUndefined();
+    expect(result.audioAsVoice).toBe(true);
+  });
+
   it.each([
     {
       name: "detects audio_as_voice tag and strips it",

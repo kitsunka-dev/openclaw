@@ -42,6 +42,53 @@ export const AgentSummarySchema = Type.Object(
   { additionalProperties: false },
 );
 
+const OwnerModeAcpLaneSchema = Type.Object(
+  {
+    id: NonEmptyString,
+    status: Type.Union([Type.Literal("working"), Type.Literal("forbidden")]),
+    reason: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+const OwnerModeSummarySchema = Type.Object(
+  {
+    enabled: Type.Boolean(),
+    productionBrain: NonEmptyString,
+    workspace: NonEmptyString,
+    sessionCanon: NonEmptyString,
+    subagents: Type.Object(
+      {
+        allowAny: Type.Boolean(),
+        allowedAgents: Type.Array(NonEmptyString),
+        maxConcurrent: Type.Optional(Type.Integer({ minimum: 1 })),
+        maxChildrenPerAgent: Type.Optional(Type.Integer({ minimum: 1 })),
+        maxSpawnDepth: Type.Optional(Type.Integer({ minimum: 0 })),
+        requireAgentId: Type.Optional(Type.Boolean()),
+      },
+      { additionalProperties: false },
+    ),
+    agentToAgent: Type.Object(
+      {
+        enabled: Type.Boolean(),
+        allow: Type.Array(NonEmptyString),
+        sessionsVisibility: NonEmptyString,
+      },
+      { additionalProperties: false },
+    ),
+    acp: Type.Object(
+      {
+        backend: Type.Optional(NonEmptyString),
+        defaultAgent: Type.Optional(NonEmptyString),
+        allowedAgents: Type.Array(NonEmptyString),
+        lanes: Type.Array(OwnerModeAcpLaneSchema),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
 export const AgentsListParamsSchema = Type.Object({}, { additionalProperties: false });
 
 export const AgentsListResultSchema = Type.Object(
@@ -50,6 +97,7 @@ export const AgentsListResultSchema = Type.Object(
     mainKey: NonEmptyString,
     scope: Type.Union([Type.Literal("per-sender"), Type.Literal("global")]),
     agents: Type.Array(AgentSummarySchema),
+    ownerMode: OwnerModeSummarySchema,
   },
   { additionalProperties: false },
 );

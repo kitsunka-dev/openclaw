@@ -167,7 +167,7 @@ describe("loadModelCatalog", () => {
     );
   });
 
-  it("adds gpt-5.4 forward-compat catalog entries when template models exist", async () => {
+  it("adds GPT-5 forward-compat catalog entries when template models exist", async () => {
     mockPiDiscoveryModels([
       {
         id: "gpt-5.2",
@@ -239,6 +239,12 @@ describe("loadModelCatalog", () => {
         provider: "openai",
         id: "gpt-5.4-nano",
         name: "gpt-5.4-nano",
+      }),
+    );
+    expect(result).toContainEqual(
+      expect.objectContaining({
+        provider: "openai-codex",
+        id: "gpt-5.5",
       }),
     );
     expect(result).toContainEqual(

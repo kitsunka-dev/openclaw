@@ -61,6 +61,7 @@ import {
 } from "./session-utils.fs.js";
 import type {
   GatewayAgentRow,
+  GatewayOwnerModeSummary,
   GatewaySessionRow,
   GatewaySessionsDefaults,
   SessionsListResult,
@@ -81,6 +82,7 @@ export {
 } from "./session-utils.fs.js";
 export type {
   GatewayAgentRow,
+  GatewayOwnerModeSummary,
   GatewaySessionRow,
   GatewaySessionsDefaults,
   SessionsListResult,
@@ -622,11 +624,95 @@ function resolveGatewayAgentModel(
   };
 }
 
+const KNOWN_ACPX_OWNER_HARNESSES = ["claude", "sidecar-coder", "openclaw", "gemini", "codex"];
+
+function normalizeStringList(values: unknown): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const raw = String(value ?? "").trim();
+    const normalized = raw === "*" ? "*" : normalizeAgentId(raw);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+}
+
+function resolveOwnerModeSummary(cfg: OpenClawConfig, defaultId: string): GatewayOwnerModeSummary {
+  const mainKey = normalizeMainKey(cfg.session?.mainKey);
+  const configuredMain = (cfg.agents?.list ?? []).find(
+    (entry) => normalizeAgentId(entry?.id) === defaultId,
+  );
+  const allowedSubagents = normalizeStringList(configuredMain?.subagents?.allowAgents);
+  const allowAnySubagent = allowedSubagents.includes("*");
+  const defaultSubagents = cfg.agents?.defaults?.subagents;
+  const acpAllowed = normalizeStringList(cfg.acp?.allowedAgents);
+  const acpAllowedSet = new Set(acpAllowed);
+  const acpLaneIds = Array.from(new Set([...acpAllowed, ...KNOWN_ACPX_OWNER_HARNESSES])).filter(
+    Boolean,
+  );
+  const a2aAllow = normalizeStringList(cfg.tools?.agentToAgent?.allow);
+  const subagents: GatewayOwnerModeSummary["subagents"] = {
+    allowAny: allowAnySubagent,
+    allowedAgents: allowedSubagents,
+  };
+  if (typeof defaultSubagents?.maxConcurrent === "number") {
+    subagents.maxConcurrent = defaultSubagents.maxConcurrent;
+  }
+  if (typeof defaultSubagents?.maxChildrenPerAgent === "number") {
+    subagents.maxChildrenPerAgent = defaultSubagents.maxChildrenPerAgent;
+  }
+  if (typeof defaultSubagents?.maxSpawnDepth === "number") {
+    subagents.maxSpawnDepth = defaultSubagents.maxSpawnDepth;
+  }
+  const requireAgentId = defaultSubagents?.requireAgentId ?? configuredMain?.subagents?.requireAgentId;
+  if (typeof requireAgentId === "boolean") {
+    subagents.requireAgentId = requireAgentId;
+  }
+  const acp: GatewayOwnerModeSummary["acp"] = {
+    allowedAgents: acpAllowed,
+    lanes: acpLaneIds.map((id) => ({
+      id,
+      status: acpAllowedSet.has(id) ? "working" : "forbidden",
+      ...(acpAllowedSet.has(id)
+        ? {}
+        : { reason: "not exposed by acp.allowedAgents; smoke before promoting" }),
+    })),
+  };
+  if (cfg.acp?.backend?.trim()) {
+    acp.backend = cfg.acp.backend.trim();
+  }
+  if (cfg.acp?.defaultAgent?.trim()) {
+    acp.defaultAgent = normalizeAgentId(cfg.acp.defaultAgent);
+  }
+
+  return {
+    enabled: true,
+    productionBrain: defaultId,
+    workspace: resolveAgentWorkspaceDir(cfg, defaultId),
+    sessionCanon: `agent:${defaultId}:${mainKey}`,
+    subagents,
+    agentToAgent: {
+      enabled: cfg.tools?.agentToAgent?.enabled === true,
+      allow: a2aAllow,
+      sessionsVisibility: cfg.tools?.sessions?.visibility ?? "tree",
+    },
+    acp,
+  };
+}
+
 export function listAgentsForGateway(cfg: OpenClawConfig): {
   defaultId: string;
   mainKey: string;
   scope: SessionScope;
   agents: GatewayAgentRow[];
+  ownerMode: GatewayOwnerModeSummary;
 } {
   const defaultId = normalizeAgentId(resolveDefaultAgentId(cfg));
   const mainKey = normalizeMainKey(cfg.session?.mainKey);
@@ -680,7 +766,7 @@ export function listAgentsForGateway(cfg: OpenClawConfig): {
       ...(model ? { model } : {}),
     };
   });
-  return { defaultId, mainKey, scope, agents };
+  return { defaultId, mainKey, scope, agents, ownerMode: resolveOwnerModeSummary(cfg, defaultId) };
 }
 
 function canonicalizeSessionKeyForAgent(agentId: string, key: string): string {

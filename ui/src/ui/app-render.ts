@@ -637,6 +637,7 @@ export function renderApp(state: AppViewState) {
               lastChannelsRefresh: state.channelsLastSuccess,
               usageResult: state.usageResult,
               sessionsResult: state.sessionsResult,
+              agentsList: state.agentsList,
               skillsReport: state.skillsReport,
               cronJobs: state.cronJobs,
               cronStatus: state.cronStatus,

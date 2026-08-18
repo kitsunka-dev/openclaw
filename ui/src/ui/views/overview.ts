@@ -7,6 +7,7 @@ import type { GatewayHelloOk } from "../gateway.ts";
 import { icons } from "../icons.ts";
 import type { UiSettings } from "../storage.ts";
 import type {
+  AgentsListResult,
   AttentionItem,
   CronJob,
   CronStatus,
@@ -41,6 +42,7 @@ export type OverviewProps = {
   // New dashboard data
   usageResult: SessionsUsageResult | null;
   sessionsResult: SessionsListResult | null;
+  agentsList: AgentsListResult | null;
   skillsReport: SkillStatusReport | null;
   cronJobs: CronJob[];
   cronStatus: CronStatus | null;
@@ -59,6 +61,86 @@ export type OverviewProps = {
   onNavigate: (tab: string) => void;
   onRefreshLogs: () => void;
 };
+
+function renderOwnerModeStatus(agentsList: AgentsListResult | null) {
+  const owner = agentsList?.ownerMode;
+  if (!owner) {
+    return nothing;
+  }
+  const workingAcp = owner.acp.lanes.filter((lane) => lane.status === "working");
+  const forbiddenAcp = owner.acp.lanes.filter((lane) => lane.status === "forbidden");
+  const configuredAgents = agentsList?.agents ?? [];
+  const subagentAccess = owner.subagents.allowAny
+    ? `all configured lanes (${configuredAgents.length})`
+    : owner.subagents.allowedAgents.join(", ") || "self only";
+  const a2aAccess = owner.agentToAgent.allow.includes("*")
+    ? "all agents"
+    : owner.agentToAgent.allow.join(", ") || "self only";
+
+  return html`
+    <section class="grid" style="margin-top: 18px;">
+      <div class="card">
+        <div class="card-title">Owner Control Plane</div>
+        <div class="card-sub">Trusted owner mode: power with explicit truth boundaries.</div>
+        <div class="stat-grid" style="margin-top: 16px;">
+          <div class="stat">
+            <div class="stat-label">Production brain</div>
+            <div class="stat-value">${owner.productionBrain}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Session canon</div>
+            <div class="stat-value mono" style="font-size: 13px;">${owner.sessionCanon}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Subagent access</div>
+            <div class="stat-value">${subagentAccess}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">A2A visibility</div>
+            <div class="stat-value">
+              ${owner.agentToAgent.enabled ? a2aAccess : "disabled"} ·
+              ${owner.agentToAgent.sessionsVisibility}
+            </div>
+          </div>
+        </div>
+        <div class="callout" style="margin-top: 14px;">
+          <div><strong>Workspace truth:</strong> <span class="mono">${owner.workspace}</span></div>
+          <div style="margin-top: 6px;">
+            <strong>Spawn:</strong>
+            <span class="mono">runtime=subagent</span> for configured OpenClaw lanes;
+            <span class="mono">runtime=acp</span> only for working ACPX harness ids.
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">ACP Lane Truth</div>
+        <div class="card-sub">Allowed means smoke-promoted; forbidden means hidden until fixed.</div>
+        <div style="margin-top: 14px;">
+          <div class="stat-label">Working ACPX ids</div>
+          <div class="row" style="margin-top: 8px; flex-wrap: wrap;">
+            ${workingAcp.length > 0
+              ? workingAcp.map((lane) => html`<span class="pill ok">${lane.id}</span>`)
+              : html`<span class="muted">none</span>`}
+          </div>
+        </div>
+        <div style="margin-top: 14px;">
+          <div class="stat-label">Forbidden / not exposed</div>
+          <div class="row" style="margin-top: 8px; flex-wrap: wrap;">
+            ${forbiddenAcp.length > 0
+              ? forbiddenAcp.map(
+                  (lane) =>
+                    html`<span class="pill warn" title=${lane.reason ?? "not exposed"}>
+                      ${lane.id}
+                    </span>`,
+                )
+              : html`<span class="muted">none</span>`}
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
 
 export function renderOverview(props: OverviewProps) {
   const snapshot = props.hello?.snapshot as
@@ -386,6 +468,8 @@ export function renderOverview(props: OverviewProps) {
             `}
       </div>
     </section>
+
+    ${renderOwnerModeStatus(props.agentsList)}
 
     <div class="ov-section-divider"></div>
 

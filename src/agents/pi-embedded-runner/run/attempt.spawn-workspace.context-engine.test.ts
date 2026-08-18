@@ -4,6 +4,7 @@ import {
   type AttemptContextEngine,
   assembleAttemptContextEngine,
   finalizeAttemptContextEngineTurn,
+  sanitizeAssembleResultSystemPromptAddition,
   runAttemptContextEngineBootstrap,
 } from "./attempt.context-engine-helpers.js";
 import {
@@ -138,6 +139,39 @@ describe("runEmbeddedAttempt context engine sessionKey forwarding", () => {
         model: "gpt-test",
       }),
     );
+  });
+
+  it("drops bare context-engine systemPromptAddition instead of promoting it to system authority", async () => {
+    const canary = "BLACKICE_LOW_TRUST_SYSTEM_PROMPT_CANARY";
+    const contextEngine = createTestContextEngine({
+      assemble: async (params) => ({
+        messages: params.messages,
+        estimatedTokens: 1,
+        systemPromptAddition: canary,
+      }),
+    });
+
+    const assembled = await assembleAttemptContextEngine({
+      contextEngine,
+      sessionId: embeddedSessionId,
+      sessionKey,
+      messages: [seedMessage],
+      tokenBudget: 2048,
+      modelId: "gpt-test",
+    });
+
+    expect(assembled?.systemPromptAddition).toBeUndefined();
+  });
+
+  it("keeps explicitly trusted context-engine systemPromptAddition", () => {
+    const trusted = sanitizeAssembleResultSystemPromptAddition({
+      messages: [seedMessage],
+      estimatedTokens: 1,
+      systemPromptAddition: "trusted runtime hint",
+      systemPromptAdditionTrust: "trusted",
+    });
+
+    expect(trusted.systemPromptAddition).toBe("trusted runtime hint");
   });
 
   it("forwards sessionKey to ingestBatch when afterTurn is absent", async () => {

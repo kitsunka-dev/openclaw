@@ -484,14 +484,22 @@ async function sendSubagentAnnounceDirectly(params: {
     const sessionOnlyOrigin = effectiveDirectOrigin?.channel
       ? effectiveDirectOrigin
       : requesterSessionOrigin;
-    const deliveryTarget = !params.requesterIsSubagent
-      ? resolveExternalBestEffortDeliveryTarget({
-          channel: effectiveDirectOrigin?.channel,
-          to: effectiveDirectOrigin?.to,
-          accountId: effectiveDirectOrigin?.accountId,
-          threadId: effectiveDirectOrigin?.threadId,
-        })
-      : { deliver: false };
+    // Owner-chat hygiene: subagent completion announcements must update the
+    // requester session internally, but must not be pushed to the external chat
+    // by default. Otherwise a private Telegram/Discord chat becomes a debug
+    // console where every worker says "done" out loud. Keep an explicit escape
+    // hatch for operators that really want the old behavior.
+    const allowExternalSubagentAnnounces =
+      process.env.OPENCLAW_SUBAGENT_ANNOUNCE_EXTERNAL === "1";
+    const deliveryTarget =
+      !params.requesterIsSubagent && allowExternalSubagentAnnounces
+        ? resolveExternalBestEffortDeliveryTarget({
+            channel: effectiveDirectOrigin?.channel,
+            to: effectiveDirectOrigin?.to,
+            accountId: effectiveDirectOrigin?.accountId,
+            threadId: effectiveDirectOrigin?.threadId,
+          })
+        : { deliver: false };
     const normalizedSessionOnlyOriginChannel = !params.requesterIsSubagent
       ? normalizeMessageChannel(sessionOnlyOrigin?.channel)
       : undefined;

@@ -351,7 +351,9 @@ export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionPar
     if (!params.onToolResult) {
       return;
     }
-    const { text: cleanedText, mediaUrls } = parseReplyDirectives(message);
+    const { text: cleanedText, mediaUrls } = parseReplyDirectives(message, {
+      allowMediaTokens: true,
+    });
     const filteredMediaUrls = filterToolResultMediaUrls(toolName, mediaUrls ?? [], result);
     if (!cleanedText && filteredMediaUrls.length === 0) {
       return;
@@ -523,7 +525,7 @@ export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionPar
     if (!params.onBlockReply) {
       return;
     }
-    const splitResult = replyDirectiveAccumulator.consume(chunk);
+    const splitResult = replyDirectiveAccumulator.consume(chunk, { allowMediaTokens: false });
     if (!splitResult) {
       return;
     }
@@ -550,9 +552,9 @@ export function subscribeEmbeddedPiSession(params: SubscribeEmbeddedPiSessionPar
   };
 
   const consumeReplyDirectives = (text: string, options?: { final?: boolean }) =>
-    replyDirectiveAccumulator.consume(text, options);
+    replyDirectiveAccumulator.consume(text, { ...options, allowMediaTokens: false });
   const consumePartialReplyDirectives = (text: string, options?: { final?: boolean }) =>
-    partialReplyDirectiveAccumulator.consume(text, options);
+    partialReplyDirectiveAccumulator.consume(text, { ...options, allowMediaTokens: false });
 
   const flushBlockReplyBuffer = () => {
     if (!params.onBlockReply) {

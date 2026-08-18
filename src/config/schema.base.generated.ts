@@ -2248,6 +2248,31 @@ export const GENERATED_BASE_CONFIG_SCHEMA = {
                 },
                 additionalProperties: false,
               },
+              refusalPressure: {
+                type: "object",
+                properties: {
+                  enabled: {
+                    type: "boolean",
+                  },
+                  retryOnce: {
+                    type: "boolean",
+                  },
+                  maxPerSession: {
+                    type: "integer",
+                    exclusiveMinimum: 0,
+                    maximum: 9007199254740991,
+                  },
+                  windowMs: {
+                    type: "integer",
+                    exclusiveMinimum: 0,
+                    maximum: 9007199254740991,
+                  },
+                  window: {
+                    type: "string",
+                  },
+                },
+                additionalProperties: false,
+              },
               contextPruning: {
                 type: "object",
                 properties: {
@@ -15271,6 +15296,6 @@ export const GENERATED_BASE_CONFIG_SCHEMA = {
       tags: ["advanced", "url-secret"],
     },
   },
-  version: "2026.3.31",
+  version: "2026.3.31-kitsunya.1",
   generatedAt: "2026-03-22T21:17:33.302Z",
 } as const satisfies BaseConfigSchemaResponse;

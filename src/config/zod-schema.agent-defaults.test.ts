@@ -12,3 +12,17 @@ describe("agent defaults schema", () => {
     ).not.toThrow();
   });
 });
+
+it("accepts refusalPressure defaults", () => {
+  expect(() =>
+    AgentDefaultsSchema.parse({
+      refusalPressure: {
+        enabled: true,
+        retryOnce: false,
+        maxPerSession: 2,
+        windowMs: 60000,
+        window: "10m",
+      },
+    }),
+  ).not.toThrow();
+});

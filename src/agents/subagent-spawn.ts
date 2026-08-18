@@ -49,6 +49,13 @@ export type SpawnSubagentMode = (typeof SUBAGENT_SPAWN_MODES)[number];
 export const SUBAGENT_SPAWN_SANDBOX_MODES = ["inherit", "require"] as const;
 export type SpawnSubagentSandboxMode = (typeof SUBAGENT_SPAWN_SANDBOX_MODES)[number];
 
+// Subagents are worker processes, not immortal background daemons. When a caller
+// omits runTimeoutSeconds and config does not provide a default, use a bounded
+// runtime so a stalled worker cannot sit in "running" forever and block its
+// controller's child slots. Callers can still opt into no-timeout explicitly by
+// passing runTimeoutSeconds: 0.
+export const DEFAULT_SUBAGENT_RUN_TIMEOUT_SECONDS = 30 * 60;
+
 export { decodeStrictBase64 };
 
 type SubagentSpawnDeps = {
@@ -157,6 +164,32 @@ function readGatewayRunId(response: Awaited<ReturnType<typeof callGateway>>): st
   }
   const { runId } = response as { runId?: unknown };
   return typeof runId === "string" && runId ? runId : undefined;
+}
+
+function readGatewayPayloadText(response: Awaited<ReturnType<typeof callGateway>>): string | undefined {
+  if (!response || typeof response !== "object") {
+    return undefined;
+  }
+  const result = (response as { result?: unknown }).result;
+  if (!result || typeof result !== "object") {
+    return undefined;
+  }
+  const payloads = (result as { payloads?: unknown }).payloads;
+  if (!Array.isArray(payloads)) {
+    return undefined;
+  }
+  const text = payloads
+    .map((payload) => {
+      if (!payload || typeof payload !== "object") {
+        return "";
+      }
+      const value = (payload as { text?: unknown }).text;
+      return typeof value === "string" ? value.trim() : "";
+    })
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+  return text || undefined;
 }
 
 function loadSubagentConfig() {
@@ -382,13 +415,13 @@ export async function spawnSubagentDirect(
   const cfg = loadSubagentConfig();
 
   // When agent omits runTimeoutSeconds, use the config default.
-  // Falls back to 0 (no timeout) if config key is also unset,
-  // preserving current behavior for existing deployments.
+  // Falls back to a bounded default if config key is also unset so workers do
+  // not hang forever. Explicit runTimeoutSeconds: 0 still means no timeout.
   const cfgSubagentTimeout =
     typeof cfg?.agents?.defaults?.subagents?.runTimeoutSeconds === "number" &&
     Number.isFinite(cfg.agents.defaults.subagents.runTimeoutSeconds)
       ? Math.max(0, Math.floor(cfg.agents.defaults.subagents.runTimeoutSeconds))
-      : 0;
+      : DEFAULT_SUBAGENT_RUN_TIMEOUT_SECONDS;
   const runTimeoutSeconds =
     typeof params.runTimeoutSeconds === "number" && Number.isFinite(params.runTimeoutSeconds)
       ? Math.max(0, Math.floor(params.runTimeoutSeconds))
@@ -701,6 +734,7 @@ export async function spawnSubagentDirect(
 
   const childIdem = crypto.randomUUID();
   let childRunId: string = childIdem;
+  let initialResultText: string | undefined;
   try {
     const {
       spawnedBy: _spawnedBy,
@@ -731,6 +765,7 @@ export async function spawnSubagentDirect(
     if (runId) {
       childRunId = runId;
     }
+    initialResultText = readGatewayPayloadText(response);
   } catch (err) {
     if (attachmentAbsDir) {
       try {
@@ -812,6 +847,7 @@ export async function spawnSubagentDirect(
       attachmentsDir: attachmentAbsDir,
       attachmentsRootDir: attachmentRootDir,
       retainAttachmentsOnKeep: retainOnSessionKeep,
+      initialResultText,
     });
   } catch (err) {
     if (attachmentAbsDir) {

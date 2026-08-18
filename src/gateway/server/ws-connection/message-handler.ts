@@ -799,6 +799,26 @@ export function attachGatewayWsMessageHandler(params: {
               role === "node" &&
               scopes.length === 0 &&
               !existingPairedDevice;
+            if ((reason === "scope-upgrade" || reason === "role-upgrade") && existingPairedDevice) {
+              logGateway.warn(
+                `security audit: rejected device access upgrade without pending request reason=${reason} device=${device.id} ip=${reportedClientIp ?? "unknown-ip"} auth=${authMethod} roleTo=${role} scopesTo=${formatAuditList(scopes)} client=${connectParams.client.id} conn=${connId}`,
+              );
+              setHandshakeState("failed");
+              setCloseCause("pairing-required", {
+                deviceId: device.id,
+                reason,
+              });
+              send({
+                type: "res",
+                id: frame.id,
+                ok: false,
+                error: "pairing required",
+                code: "PAIRING_REQUIRED",
+                payload: { deviceId: device.id, reason },
+              });
+              socket.close(1008, "pairing required");
+              return false;
+            }
             const pairing = await requestDevicePairing({
               deviceId: device.id,
               publicKey: devicePublicKey,

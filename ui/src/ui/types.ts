@@ -3,6 +3,7 @@ import type { CronJobBase } from "../../../src/cron/types-shared.js";
 import type { ConfigUiHints } from "../../../src/shared/config-ui-hints-types.js";
 import type {
   GatewayAgentRow as SharedGatewayAgentRow,
+  GatewayOwnerModeSummary,
   SessionsListResultBase,
   SessionsPatchResultBase,
 } from "../../../src/shared/session-types.js";
@@ -330,6 +331,7 @@ export type AgentsListResult = {
   mainKey: string;
   scope: string;
   agents: GatewayAgentRow[];
+  ownerMode?: GatewayOwnerModeSummary;
 };
 
 export type AgentIdentityResult = {
@@ -609,10 +611,21 @@ export type SkillStatusEntry = {
   install: SkillInstallOption[];
 };
 
+export type SkillRootStatus = {
+  path: string;
+  exists: boolean;
+  readable: boolean;
+  skillDirs: number;
+  error?: string;
+};
+
 export type SkillStatusReport = {
   workspaceDir: string;
   managedSkillsDir: string;
   skills: SkillStatusEntry[];
+  roots?: SkillRootStatus[];
+  errors?: string[];
+  checkedAt?: string;
 };
 
 export type StatusSummary = Record<string, unknown>;
