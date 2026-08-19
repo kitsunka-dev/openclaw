@@ -141,3 +141,6 @@ changelog/fragments/
 
 # Local scratch workspace
 .tmp/
+
+# local build output, never committed
+.artifacts/
