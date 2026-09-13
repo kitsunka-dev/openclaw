@@ -26,3 +26,4 @@ If you’re looking for conceptual questions (not “something broke”):
 - **Debugging:** [Watch mode, raw streams, and dev profile](/help/debugging)
 - **Testing:** [Test suites, live tests, and Docker runners](/help/testing)
 - **Scripts:** [Repository helper scripts](/help/scripts)
+- **Cloud dev environment:** [Claude Code on the web setup checklist](/help/cloud-dev-setup)

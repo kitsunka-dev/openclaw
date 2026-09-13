@@ -118,6 +118,7 @@
 
 - Runtime baseline: Node **22+** (keep Node + Bun paths working).
 - Install deps: `pnpm install`
+- Setting up a Claude Code on the web cloud environment for this repo, or seeing `pnpm install` fail on `codeload.github.com` / GitHub push 403 in one: see https://docs.openclaw.ai/help/cloud-dev-setup.
 - If deps are missing (for example `node_modules` missing, `vitest not found`, or `command not found`), run the repo’s package-manager install command (prefer lockfile/README-defined PM), then rerun the exact requested command once. Apply this to test/build/lint/typecheck/dev commands; if retry still fails, report the command and first actionable error.
 - Pre-commit hooks are installed by the package `prepare` script (`git config core.hooksPath git-hooks`). The hook formats/lints staged source files and runs `pnpm check` unless the staged change is docs-only or `FAST_COMMIT=1` is set.
 - `FAST_COMMIT=1` skips the repo-wide `pnpm check` inside the pre-commit hook only. The hook still runs targeted formatting/linting for staged files and restages formatter changes. Use it when you intentionally want a faster commit path and are running equivalent targeted verification manually. It does not change CI and does not change what `pnpm check` itself does.

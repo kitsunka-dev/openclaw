@@ -1604,6 +1604,7 @@
                   "help/debugging",
                   "help/testing",
                   "help/scripts",
+                  "help/cloud-dev-setup",
                   "debug/node-issue",
                   "diagnostics/flags"
                 ]
