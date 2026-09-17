@@ -17,7 +17,10 @@ import {
   configureTaskRegistryRuntime,
   type TaskRegistryObserverEvent,
 } from "./task-registry.store.js";
-import { claimQueuedTaskInSqlite } from "./task-registry.store.sqlite.js";
+import {
+  claimQueuedTaskInSqlite,
+  releaseRunningTaskInSqlite,
+} from "./task-registry.store.sqlite.js";
 import type { TaskRecord } from "./task-registry.types.js";
 
 function createStoredTask(): TaskRecord {
@@ -489,5 +492,43 @@ describe("task-registry store runtime", () => {
 
   it("claimQueuedTaskInSqlite returns false for a taskId that was never persisted", () => {
     expect(claimQueuedTaskInSqlite({ taskId: "never-existed", startedAt: 1 })).toBe(false);
+  });
+
+  it("releaseRunningTaskInSqlite lets only one caller release the same running row", () => {
+    const created = createTaskRecord({
+      runtime: "acp",
+      ownerKey: "agent:main:main",
+      scopeKind: "session",
+      childSessionKey: "agent:codex:acp:release",
+      runId: "run-release-sqlite",
+      task: "Running sqlite task",
+      status: "running",
+      deliveryStatus: "pending",
+    });
+
+    const first = releaseRunningTaskInSqlite({ taskId: created.taskId });
+    const second = releaseRunningTaskInSqlite({ taskId: created.taskId });
+
+    expect(first).toBe(true);
+    expect(second).toBe(false);
+  });
+
+  it("releaseRunningTaskInSqlite returns false for a task that is not running", () => {
+    const created = createTaskRecord({
+      runtime: "acp",
+      ownerKey: "agent:main:main",
+      scopeKind: "session",
+      childSessionKey: "agent:codex:acp:not-running",
+      runId: "run-not-running-sqlite",
+      task: "Queued sqlite task",
+      status: "queued",
+      deliveryStatus: "pending",
+    });
+
+    expect(releaseRunningTaskInSqlite({ taskId: created.taskId })).toBe(false);
+  });
+
+  it("releaseRunningTaskInSqlite returns false for a taskId that was never persisted", () => {
+    expect(releaseRunningTaskInSqlite({ taskId: "never-existed" })).toBe(false);
   });
 });

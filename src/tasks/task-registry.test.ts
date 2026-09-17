@@ -27,6 +27,7 @@ import {
   getTaskRegistrySummary,
   isParentFlowLinkError,
   listTasksForOwnerKey,
+  releaseTaskClaim,
   listTaskRecords,
   linkTaskToFlowById,
   maybeDeliverTaskStateChangeUpdate,
@@ -460,6 +461,110 @@ describe("task-registry", () => {
         expect(second).toBeUndefined();
         // The second (losing) caller's startedAt must never overwrite the first's.
         expect(getTaskById(created.taskId)).toMatchObject({ startedAt: 100 });
+      });
+    });
+  });
+
+  describe("releaseTaskClaim", () => {
+    it("hands a running task back to queued and clears startedAt", async () => {
+      await withTaskRegistryTempDir(async (root) => {
+        process.env.OPENCLAW_STATE_DIR = root;
+        resetTaskRegistryForTests();
+
+        const created = createTaskRecord({
+          runtime: "acp",
+          ownerKey: "agent:main:main",
+          scopeKind: "session",
+          runId: "run-release-basic",
+          task: "Releasable task",
+          status: "running",
+          deliveryStatus: "pending",
+        });
+
+        const released = releaseTaskClaim({ taskId: created.taskId });
+
+        expect(released).toMatchObject({
+          taskId: created.taskId,
+          status: "queued",
+        });
+        expect(released?.startedAt).toBeUndefined();
+        expect(getTaskById(created.taskId)).toMatchObject({ status: "queued" });
+      });
+    });
+
+    it("refuses to release a task that is not running", async () => {
+      await withTaskRegistryTempDir(async (root) => {
+        process.env.OPENCLAW_STATE_DIR = root;
+        resetTaskRegistryForTests();
+
+        const created = createTaskRecord({
+          runtime: "acp",
+          ownerKey: "agent:main:main",
+          scopeKind: "session",
+          runId: "run-release-already-queued",
+          task: "Already queued task",
+          status: "queued",
+          deliveryStatus: "pending",
+        });
+
+        expect(releaseTaskClaim({ taskId: created.taskId })).toBeUndefined();
+        expect(getTaskById(created.taskId)).toMatchObject({ status: "queued" });
+      });
+    });
+
+    it("returns undefined for a taskId that does not exist", async () => {
+      await withTaskRegistryTempDir(async () => {
+        expect(releaseTaskClaim({ taskId: "no-such-task" })).toBeUndefined();
+      });
+    });
+
+    it("only lets one of two sequential releases on the same task win", async () => {
+      await withTaskRegistryTempDir(async (root) => {
+        process.env.OPENCLAW_STATE_DIR = root;
+        resetTaskRegistryForTests();
+
+        const created = createTaskRecord({
+          runtime: "acp",
+          ownerKey: "agent:main:main",
+          scopeKind: "session",
+          runId: "run-release-race",
+          task: "Contested running task",
+          status: "running",
+          deliveryStatus: "pending",
+        });
+
+        const first = releaseTaskClaim({ taskId: created.taskId });
+        const second = releaseTaskClaim({ taskId: created.taskId });
+
+        expect(first).toMatchObject({ status: "queued" });
+        expect(second).toBeUndefined();
+      });
+    });
+
+    it("round-trips with claimTaskForExecution", async () => {
+      await withTaskRegistryTempDir(async (root) => {
+        process.env.OPENCLAW_STATE_DIR = root;
+        resetTaskRegistryForTests();
+
+        const created = createTaskRecord({
+          runtime: "acp",
+          ownerKey: "agent:main:main",
+          scopeKind: "session",
+          runId: "run-release-roundtrip",
+          task: "Round-trip task",
+          status: "queued",
+          deliveryStatus: "pending",
+        });
+
+        const claimed = claimTaskForExecution({ taskId: created.taskId, startedAt: 100 });
+        expect(claimed).toMatchObject({ status: "running" });
+
+        const released = releaseTaskClaim({ taskId: created.taskId });
+        expect(released).toMatchObject({ status: "queued" });
+
+        // Once released, a fresh claim must be able to win again.
+        const reclaimed = claimTaskForExecution({ taskId: created.taskId, startedAt: 200 });
+        expect(reclaimed).toMatchObject({ status: "running", startedAt: 200 });
       });
     });
   });

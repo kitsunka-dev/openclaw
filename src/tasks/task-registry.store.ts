@@ -5,6 +5,7 @@ import {
   deleteTaskDeliveryStateFromSqlite,
   deleteTaskRegistryRecordFromSqlite,
   loadTaskRegistryStateFromSqlite,
+  releaseRunningTaskInSqlite,
   saveTaskRegistryStateToSqlite,
   upsertTaskWithDeliveryStateToSqlite,
   upsertTaskDeliveryStateToSqlite,
@@ -35,6 +36,12 @@ export type TaskRegistryStore = {
    * omit this; callers fall back to trusting their own in-process check.
    */
   claimQueuedTask?: (params: { taskId: string; startedAt: number }) => boolean;
+  /**
+   * Atomic complement to claimQueuedTask: hands a "running" task back to
+   * "queued" so a claimant that failed to actually start work doesn't leave
+   * the task stuck. Optional for the same reason claimQueuedTask is.
+   */
+  releaseRunningTask?: (params: { taskId: string }) => boolean;
   close?: () => void;
 };
 
@@ -69,6 +76,7 @@ const defaultTaskRegistryStore: TaskRegistryStore = {
   upsertDeliveryState: upsertTaskDeliveryStateToSqlite,
   deleteDeliveryState: deleteTaskDeliveryStateFromSqlite,
   claimQueuedTask: claimQueuedTaskInSqlite,
+  releaseRunningTask: releaseRunningTaskInSqlite,
   close: closeTaskRegistrySqliteStore,
 };
 

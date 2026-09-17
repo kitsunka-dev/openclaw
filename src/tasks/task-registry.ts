@@ -1646,6 +1646,46 @@ export function claimTaskForExecution(params: {
   return updated ? cloneTaskRecord(updated) : undefined;
 }
 
+/**
+ * Atomically hand a "running" task back to "queued" - the direct complement
+ * of claimTaskForExecution. For a claimant that won the claim but then
+ * failed to actually start work (e.g. spawn failed immediately after the
+ * claim), this lets it undo its own claim instead of leaving the task stuck
+ * "running" forever with nothing executing it.
+ *
+ * This is deliberately narrow: it is for a claimant releasing its own claim
+ * right after losing the race to actually start work, not a general
+ * "unstick any stale running task" repair. A task that has been running for
+ * a while may have already produced real, external side effects; blindly
+ * requeuing it here would risk re-running that work from scratch. Deciding
+ * when it's safe to reclaim a task whose original claimant is gone (e.g.
+ * crashed) is a separate, harder problem - not solved by this function.
+ *
+ * Returns the updated (now "queued") record on success. Returns undefined
+ * if the task does not exist, is not "running", or another caller already
+ * changed its status.
+ */
+export function releaseTaskClaim(params: { taskId: string }): TaskRecord | undefined {
+  ensureTaskRegistryReady();
+  const taskId = params.taskId.trim();
+  const current = tasks.get(taskId);
+  if (!current || current.status !== "running") {
+    return undefined;
+  }
+  const store = getTaskRegistryStore();
+  const released = store.releaseRunningTask
+    ? store.releaseRunningTask({ taskId })
+    : // No cross-process release primitive available (e.g. a pure in-memory
+      // test store) - fall back to the in-process check above, which is
+      // already race-free within a single Node process.
+      true;
+  if (!released) {
+    return undefined;
+  }
+  const updated = updateTask(taskId, { status: "queued", startedAt: undefined });
+  return updated ? cloneTaskRecord(updated) : undefined;
+}
+
 export function markTaskRunningByRunId(params: {
   runId: string;
   runtime?: TaskRuntime;

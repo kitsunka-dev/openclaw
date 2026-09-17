@@ -55,6 +55,7 @@ type TaskRegistryStatements = {
   clearRows: StatementSync;
   clearDeliveryStates: StatementSync;
   claimQueuedRow: StatementSync;
+  releaseRunningRow: StatementSync;
 };
 
 type TaskRegistryDatabase = {
@@ -325,6 +326,15 @@ function createStatements(db: DatabaseSync): TaskRegistryStatements {
       SET status = 'running', started_at = ?
       WHERE task_id = ? AND status = 'queued'
     `),
+    // Atomic complement to claimQueuedRow: only the caller that actually
+    // holds the "running" row can hand it back to "queued". A caller that
+    // raced and lost the original claim (or whose claim already moved on
+    // to a terminal status) gets `changes === 0` and must not touch the row.
+    releaseRunningRow: db.prepare(`
+      UPDATE task_runs
+      SET status = 'queued', started_at = NULL
+      WHERE task_id = ? AND status = 'running'
+    `),
   };
 }
 
@@ -520,6 +530,20 @@ export function upsertTaskRegistryRecordToSqlite(task: TaskRecord) {
 export function claimQueuedTaskInSqlite(params: { taskId: string; startedAt: number }): boolean {
   const store = openTaskRegistryDatabase();
   const result = store.statements.claimQueuedRow.run(params.startedAt, params.taskId);
+  const changes = typeof result.changes === "bigint" ? Number(result.changes) : result.changes;
+  return changes === 1;
+}
+
+/**
+ * Atomically hand a "running" task back to "queued", across processes. The
+ * direct complement of claimQueuedTaskInSqlite: it lets a claimant that
+ * failed to actually start work (e.g. spawn failed right after the claim)
+ * release the task instead of leaving it stuck "running" forever. Returns
+ * true only if this call's UPDATE matched the row.
+ */
+export function releaseRunningTaskInSqlite(params: { taskId: string }): boolean {
+  const store = openTaskRegistryDatabase();
+  const result = store.statements.releaseRunningRow.run(params.taskId);
   const changes = typeof result.changes === "bigint" ? Number(result.changes) : result.changes;
   return changes === 1;
 }
