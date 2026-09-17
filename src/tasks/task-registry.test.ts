@@ -18,6 +18,7 @@ import { createManagedTaskFlow, resetTaskFlowRegistryForTests } from "./task-flo
 import { configureTaskFlowRegistryRuntime } from "./task-flow-registry.store.js";
 import {
   cancelTaskById,
+  claimTaskForExecution,
   createTaskRecord,
   findLatestTaskForOwnerKey,
   findLatestTaskForRelatedSessionKey,
@@ -380,6 +381,85 @@ describe("task-registry", () => {
           cli: 0,
           cron: 1,
         },
+      });
+    });
+  });
+
+  describe("claimTaskForExecution", () => {
+    it("claims a queued task and flips it to running", async () => {
+      await withTaskRegistryTempDir(async (root) => {
+        process.env.OPENCLAW_STATE_DIR = root;
+        resetTaskRegistryForTests();
+
+        const created = createTaskRecord({
+          runtime: "acp",
+          ownerKey: "agent:main:main",
+          scopeKind: "session",
+          runId: "run-claim-basic",
+          task: "Claimable task",
+          status: "queued",
+          deliveryStatus: "pending",
+        });
+
+        const claimed = claimTaskForExecution({ taskId: created.taskId, startedAt: 500 });
+
+        expect(claimed).toMatchObject({
+          taskId: created.taskId,
+          status: "running",
+          startedAt: 500,
+        });
+        expect(getTaskById(created.taskId)).toMatchObject({ status: "running" });
+      });
+    });
+
+    it("refuses to claim a task that is not queued", async () => {
+      await withTaskRegistryTempDir(async (root) => {
+        process.env.OPENCLAW_STATE_DIR = root;
+        resetTaskRegistryForTests();
+
+        const created = createTaskRecord({
+          runtime: "acp",
+          ownerKey: "agent:main:main",
+          scopeKind: "session",
+          runId: "run-claim-already-running",
+          task: "Already running task",
+          status: "running",
+          deliveryStatus: "pending",
+        });
+
+        expect(claimTaskForExecution({ taskId: created.taskId })).toBeUndefined();
+        expect(getTaskById(created.taskId)).toMatchObject({ status: "running" });
+      });
+    });
+
+    it("returns undefined for a taskId that does not exist", async () => {
+      await withTaskRegistryTempDir(async () => {
+        expect(claimTaskForExecution({ taskId: "no-such-task" })).toBeUndefined();
+      });
+    });
+
+    it("only lets one of two sequential claims on the same task win", async () => {
+      await withTaskRegistryTempDir(async (root) => {
+        process.env.OPENCLAW_STATE_DIR = root;
+        resetTaskRegistryForTests();
+
+        const created = createTaskRecord({
+          runtime: "acp",
+          ownerKey: "agent:main:main",
+          scopeKind: "session",
+          runId: "run-claim-race",
+          task: "Contested task",
+          status: "queued",
+          deliveryStatus: "pending",
+        });
+
+        const first = claimTaskForExecution({ taskId: created.taskId, startedAt: 100 });
+        const second = claimTaskForExecution({ taskId: created.taskId, startedAt: 200 });
+
+        expect(first).toMatchObject({ status: "running", startedAt: 100 });
+        expect(second).toBeUndefined();
+        // The second (losing) caller's startedAt must never overwrite the first's.
+        expect(getTaskById(created.taskId)).toMatchObject({ startedAt: 100 });
       });
     });
   });

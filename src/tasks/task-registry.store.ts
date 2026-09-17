@@ -1,4 +1,5 @@
 import {
+  claimQueuedTaskInSqlite,
   closeTaskRegistrySqliteStore,
   deleteTaskAndDeliveryStateFromSqlite,
   deleteTaskDeliveryStateFromSqlite,
@@ -26,6 +27,14 @@ export type TaskRegistryStore = {
   deleteTask?: (taskId: string) => void;
   upsertDeliveryState?: (state: TaskDeliveryState) => void;
   deleteDeliveryState?: (taskId: string) => void;
+  /**
+   * Atomically flip a task from "queued" to "running". Returns true only for
+   * the caller that actually won the transition - callers that get false
+   * must not proceed as if they own the task. Optional: stores that cannot
+   * offer cross-process atomicity (e.g. a pure in-memory test store) may
+   * omit this; callers fall back to trusting their own in-process check.
+   */
+  claimQueuedTask?: (params: { taskId: string; startedAt: number }) => boolean;
   close?: () => void;
 };
 
@@ -59,6 +68,7 @@ const defaultTaskRegistryStore: TaskRegistryStore = {
   deleteTask: deleteTaskRegistryRecordFromSqlite,
   upsertDeliveryState: upsertTaskDeliveryStateToSqlite,
   deleteDeliveryState: deleteTaskDeliveryStateFromSqlite,
+  claimQueuedTask: claimQueuedTaskInSqlite,
   close: closeTaskRegistrySqliteStore,
 };
 

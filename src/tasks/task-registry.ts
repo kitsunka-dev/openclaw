@@ -1613,6 +1613,39 @@ function updateTaskDeliveryByRunId(params: {
   });
 }
 
+/**
+ * Atomically claim a queued task for execution so two callers - in this
+ * process or another - can never both start working the same task.
+ *
+ * Returns the updated (now "running") record on success. Returns undefined
+ * if the task does not exist, is not "queued", or another caller already
+ * won the claim - in every undefined case, the caller must not start work.
+ */
+export function claimTaskForExecution(params: {
+  taskId: string;
+  startedAt?: number;
+}): TaskRecord | undefined {
+  ensureTaskRegistryReady();
+  const taskId = params.taskId.trim();
+  const current = tasks.get(taskId);
+  if (!current || current.status !== "queued") {
+    return undefined;
+  }
+  const startedAt = params.startedAt ?? Date.now();
+  const store = getTaskRegistryStore();
+  const claimed = store.claimQueuedTask
+    ? store.claimQueuedTask({ taskId, startedAt })
+    : // No cross-process claim primitive available (e.g. a pure in-memory
+      // test store) - fall back to the in-process check above, which is
+      // already race-free within a single Node process.
+      true;
+  if (!claimed) {
+    return undefined;
+  }
+  const updated = updateTask(taskId, { status: "running", startedAt });
+  return updated ? cloneTaskRecord(updated) : undefined;
+}
+
 export function markTaskRunningByRunId(params: {
   runId: string;
   runtime?: TaskRuntime;
