@@ -1,0 +1,36 @@
+{
+  "name": "@kitsunka-dev/agent-escalation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OpenClaw plugin: escalate_to_operator + verify_task tools for honest uncertainty handling and self-verification",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "0.34.49"
+  },
+  "devDependencies": {
+    "openclaw": ">=2026.9.4",
+    "typescript": "6.0.3",
+    "vitest": "5.0.0"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.9.4"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "openclaw": {
+    "extensions": ["./index.ts"],
+    "install": {
+      "minHostVersion": ">=2026.9.4"
+    },
+    "compat": {
+      "pluginApi": ">=2026.9.4"
+    }
+  }
+}
