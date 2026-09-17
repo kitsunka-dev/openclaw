@@ -66,6 +66,35 @@ independent of whether the agent itself would have chosen to escalate.
 Repeat tracking is per-session, keeps only the most recent failing
 signature (not full history), and is bounded to 2000 tracked sessions.
 
+#### Deterministic conditions (`checkId`)
+
+A condition can set `checkId` instead of `met`/`evidence`, to have the tool
+verify it directly instead of trusting the agent's self-report:
+
+```json
+{
+  "taskType": "file_edit",
+  "conditions": [
+    { "description": "workspace has uncommitted changes", "checkId": "git_diff_nonempty" }
+  ]
+}
+```
+
+The tool runs a fixed, built-in check (currently `git_diff_nonempty`: `git
+diff --quiet` in the run's `workspaceDir`) and computes `met`/`evidence`
+itself from the real exit code. `met`/`evidence` must be omitted when
+`checkId` is set - the call is rejected otherwise, so the two verification
+modes can't be silently mixed on one condition.
+
+This is deliberately closed for safety: the set of possible checks is a
+fixed registry hardcoded in `src/verify-task-tool.ts`, never a command
+string or argv the agent supplies. Letting the agent choose what gets
+executed here would bypass the repo's own `tools.exec` security tiers
+(deny/allowlist/full, sandboxing) - so adding a new check means editing this
+plugin's code, not something callers can do from tool input. An exit code
+outside the check's expected set throws instead of guessing true/false, and
+a missing `workspaceDir` throws instead of running in an arbitrary cwd.
+
 ## Why a plugin, not core
 
 Both tools were originally wired directly into core files

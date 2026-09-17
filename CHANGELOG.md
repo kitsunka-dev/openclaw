@@ -7,6 +7,7 @@ Docs: https://docs.openclaw.ai
 ### Changes
 
 - Plugins/tasks: add a detached runtime registration contract so plugin executors can own detached task lifecycle and cancellation without reaching into core task internals. (#68915) Thanks @mbelinky.
+- Plugins/agent-escalation: add a bundled plugin with `escalate_to_operator` and `verify_task` tools so agents can flag low confidence or unverified work instead of guessing or asserting completion; `verify_task` supports an optional deterministic `checkId` that runs a real, fixed check instead of trusting the agent's self-report. (#2)
 
 ### Fixes
 
