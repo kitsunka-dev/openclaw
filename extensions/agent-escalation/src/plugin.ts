@@ -10,7 +10,11 @@ export function registerAgentEscalationPlugin(api: OpenClawPluginApi): void {
 
   api.registerTool(
     (ctx: OpenClawPluginToolContext) =>
-      createVerifyTaskTool({ agentSessionKey: ctx.sessionKey, logger: api.logger }),
+      createVerifyTaskTool({
+        agentSessionKey: ctx.sessionKey,
+        logger: api.logger,
+        workspaceDir: ctx.workspaceDir,
+      }),
     { name: "verify_task" },
   );
 }
