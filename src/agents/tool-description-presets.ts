@@ -9,6 +9,8 @@ export const SESSIONS_SEND_TOOL_DISPLAY_SUMMARY = "Send a message to another vis
 export const SESSIONS_SPAWN_TOOL_DISPLAY_SUMMARY = "Spawn sub-agent or ACP sessions.";
 export const SESSION_STATUS_TOOL_DISPLAY_SUMMARY = "Show session status, usage, and model state.";
 export const UPDATE_PLAN_TOOL_DISPLAY_SUMMARY = "Track a short structured work plan.";
+export const ESCALATE_TO_OPERATOR_TOOL_DISPLAY_SUMMARY =
+  "Flag that you cannot answer confidently and need a human.";
 
 export function describeSessionsListTool(): string {
   return [
@@ -53,5 +55,13 @@ export function describeUpdatePlanTool(): string {
     "Update the current structured work plan for this run.",
     "Use this for non-trivial multi-step work so the plan stays current while execution continues.",
     "Keep steps short, mark at most one step as `in_progress`, and skip this tool for simple one-step tasks.",
+  ].join(" ");
+}
+
+export function describeEscalateToOperatorTool(): string {
+  return [
+    "Use this when you do not have enough information or confidence to complete the request correctly, and guessing risks giving a wrong answer.",
+    "Call this instead of fabricating a result. State the reason, what you already tried, and, if relevant, the specific question the operator needs to resolve.",
+    "After calling this tool, tell the user plainly that you are escalating and why - never present a guess as if it were a verified answer.",
   ].join(" ");
 }
