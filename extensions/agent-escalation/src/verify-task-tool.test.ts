@@ -38,12 +38,17 @@ describe("verify_task tool", () => {
     expect((result.details as { escalation?: unknown }).escalation).toBeUndefined();
   });
 
-  it("auto-escalates when the same conditions fail twice in a row for the same session", async () => {
-    const tool = createVerifyTaskTool({ agentSessionKey: "session-c" });
+  it("auto-escalates and logs when the same conditions fail twice in a row", async () => {
+    const errors: string[] = [];
+    const tool = createVerifyTaskTool({
+      agentSessionKey: "session-c",
+      logger: { error: (message) => errors.push(message) },
+    });
     const conditions = [{ description: "response status is 200", met: false }];
 
     const first = await tool.execute("call-1", { taskType: "api_call", conditions });
     expect(first.details).toMatchObject({ status: "unmet", repeatCount: 1 });
+    expect(errors).toHaveLength(0);
 
     const second = await tool.execute("call-2", { taskType: "api_call", conditions });
     expect(second.details).toMatchObject({ status: "unmet", repeatCount: 2 });
@@ -52,6 +57,8 @@ describe("verify_task tool", () => {
     expect(escalation?.status).toBe("escalated");
     expect(escalation?.reason).toContain("api_call");
     expect(escalation?.reason).toContain("response status is 200");
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("auto-escalated");
   });
 
   it("resets the streak when the unmet conditions change", async () => {

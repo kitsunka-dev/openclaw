@@ -1,9 +1,6 @@
 import { Type } from "@sinclair/typebox";
-import {
-  describeEscalateToOperatorTool,
-  ESCALATE_TO_OPERATOR_TOOL_DISPLAY_SUMMARY,
-} from "../tool-description-presets.js";
-import { type AnyAgentTool, readStringParam } from "./common.js";
+import { readStringParam } from "openclaw/plugin-sdk/param-readers";
+import type { AnyAgentTool } from "openclaw/plugin-sdk/plugin-entry";
 
 const EscalateToOperatorToolSchema = Type.Object({
   reason: Type.String({
@@ -30,9 +27,9 @@ export type EscalationRecord = {
 };
 
 /**
- * Shared shape-builder so a model-initiated escalate_to_operator call and a
- * code-detected auto-escalation (e.g. a critical tool-loop block) produce the
- * exact same record - one path doesn't have to happen for the other to count.
+ * Shared shape-builder so a model-initiated escalate_to_operator call and any
+ * future code-detected auto-escalation in this plugin produce the exact same
+ * record shape.
  */
 export function buildEscalationRecord(params: {
   reason: string;
@@ -51,8 +48,12 @@ export function createEscalateToOperatorTool(): AnyAgentTool {
   return {
     label: "Escalate to Operator",
     name: "escalate_to_operator",
-    displaySummary: ESCALATE_TO_OPERATOR_TOOL_DISPLAY_SUMMARY,
-    description: describeEscalateToOperatorTool(),
+    displaySummary: "Flag that you cannot answer confidently and need a human.",
+    description: [
+      "Use this when you do not have enough information or confidence to complete the request correctly, and guessing risks giving a wrong answer.",
+      "Call this instead of fabricating a result. State the reason, what you already tried, and, if relevant, the specific question the operator needs to resolve.",
+      "After calling this tool, tell the user plainly that you are escalating and why - never present a guess as if it were a verified answer.",
+    ].join(" "),
     parameters: EscalateToOperatorToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;

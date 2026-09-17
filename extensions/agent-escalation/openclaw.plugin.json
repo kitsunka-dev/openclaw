@@ -1,0 +1,9 @@
+{
+  "id": "agent-escalation",
+  "name": "Agent Escalation",
+  "description": "Adds escalate_to_operator and verify_task tools so agents flag low confidence and repeated verification failures to a human instead of guessing.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false
+  }
+}

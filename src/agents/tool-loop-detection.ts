@@ -3,7 +3,6 @@ import type { SessionState } from "../logging/diagnostic-session-state.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { digestStable, stableStringify } from "../shared/stable-hash.js";
 import { isPlainObject } from "../utils.js";
-import { buildEscalationRecord, type EscalationRecord } from "./tools/escalate-to-operator-tool.js";
 
 const log = createSubsystemLogger("agents/loop-detection");
 
@@ -24,13 +23,6 @@ export type LoopDetectionResult =
       message: string;
       pairedToolName?: string;
       warningKey?: string;
-      /**
-       * Populated on every critical result. Callers should record/log this
-       * directly instead of only relying on the agent choosing to call
-       * escalate_to_operator itself - the record must exist whether or not
-       * the model acts on the message.
-       */
-      escalation?: EscalationRecord;
     };
 
 export const TOOL_CALL_HISTORY_SIZE = 30;
@@ -415,18 +407,13 @@ export function detectToolCallLoop(
   const pingPong = getPingPongStreak(history, currentHash);
 
   if (unknownToolStreak.count >= resolvedConfig.unknownToolThreshold) {
-    const message = `CRITICAL: attempted unavailable tool ${unknownToolStreak.unknownToolName ?? toolName} ${unknownToolStreak.count} times. Stop retrying that missing tool. Call escalate_to_operator with this as the reason instead of guessing an answer.`;
     return {
       stuck: true,
       level: "critical",
       detector: "unknown_tool_repeat",
       count: unknownToolStreak.count,
-      message,
+      message: `CRITICAL: attempted unavailable tool ${unknownToolStreak.unknownToolName ?? toolName} ${unknownToolStreak.count} times. Stop retrying that missing tool and answer without it.`,
       warningKey: `unknown-tool:${toolName}:${unknownToolStreak.unknownToolName ?? "unknown"}`,
-      escalation: buildEscalationRecord({
-        reason: message,
-        attempted: `Called unavailable tool "${unknownToolStreak.unknownToolName ?? toolName}" ${unknownToolStreak.count} times.`,
-      }),
     };
   }
 
@@ -434,18 +421,13 @@ export function detectToolCallLoop(
     log.error(
       `Global circuit breaker triggered: ${toolName} repeated ${noProgressStreak} times with no progress`,
     );
-    const message = `CRITICAL: ${toolName} has repeated identical no-progress outcomes ${noProgressStreak} times. Session execution blocked by global circuit breaker to prevent runaway loops. Call escalate_to_operator with this as the reason instead of retrying further.`;
     return {
       stuck: true,
       level: "critical",
       detector: "global_circuit_breaker",
       count: noProgressStreak,
-      message,
+      message: `CRITICAL: ${toolName} has repeated identical no-progress outcomes ${noProgressStreak} times. Session execution blocked by global circuit breaker to prevent runaway loops.`,
       warningKey: `global:${toolName}:${currentHash}:${noProgress.latestResultHash ?? "none"}`,
-      escalation: buildEscalationRecord({
-        reason: message,
-        attempted: `Called ${toolName} ${noProgressStreak} times with identical no-progress outcomes.`,
-      }),
     };
   }
 
@@ -455,18 +437,13 @@ export function detectToolCallLoop(
     noProgressStreak >= resolvedConfig.criticalThreshold
   ) {
     log.error(`Critical polling loop detected: ${toolName} repeated ${noProgressStreak} times`);
-    const message = `CRITICAL: Called ${toolName} with identical arguments and no progress ${noProgressStreak} times. This appears to be a stuck polling loop. Session execution blocked to prevent resource waste. Call escalate_to_operator with this as the reason instead of retrying further.`;
     return {
       stuck: true,
       level: "critical",
       detector: "known_poll_no_progress",
       count: noProgressStreak,
-      message,
+      message: `CRITICAL: Called ${toolName} with identical arguments and no progress ${noProgressStreak} times. This appears to be a stuck polling loop. Session execution blocked to prevent resource waste.`,
       warningKey: `poll:${toolName}:${currentHash}:${noProgress.latestResultHash ?? "none"}`,
-      escalation: buildEscalationRecord({
-        reason: message,
-        attempted: `Polled ${toolName} ${noProgressStreak} times with identical arguments and no progress.`,
-      }),
     };
   }
 
@@ -498,19 +475,14 @@ export function detectToolCallLoop(
     log.error(
       `Critical ping-pong loop detected: alternating calls count=${pingPong.count} currentTool=${toolName}`,
     );
-    const message = `CRITICAL: You are alternating between repeated tool-call patterns (${pingPong.count} consecutive calls) with no progress. This appears to be a stuck ping-pong loop. Session execution blocked to prevent resource waste. Call escalate_to_operator with this as the reason instead of retrying further.`;
     return {
       stuck: true,
       level: "critical",
       detector: "ping_pong",
       count: pingPong.count,
-      message,
+      message: `CRITICAL: You are alternating between repeated tool-call patterns (${pingPong.count} consecutive calls) with no progress. This appears to be a stuck ping-pong loop. Session execution blocked to prevent resource waste.`,
       pairedToolName: pingPong.pairedToolName,
       warningKey: pingPongWarningKey,
-      escalation: buildEscalationRecord({
-        reason: message,
-        attempted: `Alternated between ${toolName} and ${pingPong.pairedToolName ?? "another tool"} ${pingPong.count} times with no progress.`,
-      }),
     };
   }
 

@@ -1,14 +1,8 @@
 import { Type } from "@sinclair/typebox";
-import { createSubsystemLogger } from "../../logging/subsystem.js";
-import { digestStable } from "../../shared/stable-hash.js";
-import {
-  describeVerifyTaskTool,
-  VERIFY_TASK_TOOL_DISPLAY_SUMMARY,
-} from "../tool-description-presets.js";
-import { type AnyAgentTool, ToolInputError, readStringParam } from "./common.js";
+import { readStringParam } from "openclaw/plugin-sdk/param-readers";
+import type { AnyAgentTool } from "openclaw/plugin-sdk/plugin-entry";
 import { buildEscalationRecord, type EscalationRecord } from "./escalate-to-operator-tool.js";
-
-const log = createSubsystemLogger("agents/verify-task");
+import { digestStable } from "./stable-hash.js";
 
 const VerifyConditionSchema = Type.Object(
   {
@@ -49,11 +43,11 @@ type VerifyCondition = {
 function readConditions(params: Record<string, unknown>): VerifyCondition[] {
   const raw = params.conditions;
   if (!Array.isArray(raw) || raw.length === 0) {
-    throw new ToolInputError("conditions required");
+    throw new Error("conditions required");
   }
   return raw.map((entry, index) => {
     if (!entry || typeof entry !== "object") {
-      throw new ToolInputError(`conditions[${index}] must be an object`);
+      throw new Error(`conditions[${index}] must be an object`);
     }
     const conditionParams = entry as Record<string, unknown>;
     const description = readStringParam(conditionParams, "description", {
@@ -62,18 +56,21 @@ function readConditions(params: Record<string, unknown>): VerifyCondition[] {
     });
     const met = conditionParams.met;
     if (typeof met !== "boolean") {
-      throw new ToolInputError(`conditions[${index}].met must be a boolean`);
+      throw new Error(`conditions[${index}].met must be a boolean`);
     }
     const evidence = readStringParam(conditionParams, "evidence");
-    return { description, met, ...(evidence ? { evidence } : {}) };
+    const condition: VerifyCondition = { description, met };
+    if (evidence) {
+      condition.evidence = evidence;
+    }
+    return condition;
   });
 }
 
 /**
  * Tracks only the most recent failing signature per session, not a full
  * history - this answers "did the exact same conditions fail twice in a
- * row", not "how many times has this ever failed". Bounded by session count,
- * same eviction style as adjustedParamsByToolCallId in before-tool-call.
+ * row", not "how many times has this ever failed". Bounded by session count.
  */
 const REPEAT_FAILURE_THRESHOLD = 2;
 const MAX_TRACKED_SESSIONS = 2000;
@@ -103,12 +100,20 @@ export function resetVerifyTaskTrackingForTest(): void {
   lastFailureBySession.clear();
 }
 
-export function createVerifyTaskTool(opts?: { agentSessionKey?: string }): AnyAgentTool {
+export function createVerifyTaskTool(opts?: {
+  agentSessionKey?: string;
+  logger?: { error: (message: string) => void };
+}): AnyAgentTool {
   return {
     label: "Verify Task",
     name: "verify_task",
-    displaySummary: VERIFY_TASK_TOOL_DISPLAY_SUMMARY,
-    description: describeVerifyTaskTool(),
+    displaySummary: "Check whether a task's completion conditions are actually true.",
+    description: [
+      "Before declaring a task done, list its concrete completion conditions and report whether each one is actually true - not whether you expect it to be.",
+      "Only mark a condition met if you checked it against a tool result, a file's real contents, or another concrete signal, and cite that in its evidence field.",
+      "If any condition comes back unmet, fix the specific thing that failed and call this again with the same conditions restated.",
+      "If the exact same conditions are still unmet on a second call in a row, this is auto-escalated to the operator - tell the user plainly that you could not complete the task and why, instead of presenting an unverified result as done.",
+    ].join(" "),
     parameters: VerifyTaskToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -134,7 +139,9 @@ export function createVerifyTaskTool(opts?: { agentSessionKey?: string }): AnyAg
           attempted:
             "Ran verify_task, attempted a fix, ran verify_task again with the same conditions still unmet.",
         });
-        log.error(`Auto-escalated to operator: ${JSON.stringify(escalation)}`);
+        opts?.logger?.error(
+          `agent-escalation: auto-escalated to operator: ${JSON.stringify(escalation)}`,
+        );
       }
 
       return {
