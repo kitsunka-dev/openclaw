@@ -11,6 +11,8 @@ export const SESSION_STATUS_TOOL_DISPLAY_SUMMARY = "Show session status, usage, 
 export const UPDATE_PLAN_TOOL_DISPLAY_SUMMARY = "Track a short structured work plan.";
 export const ESCALATE_TO_OPERATOR_TOOL_DISPLAY_SUMMARY =
   "Flag that you cannot answer confidently and need a human.";
+export const VERIFY_TASK_TOOL_DISPLAY_SUMMARY =
+  "Check whether a task's completion conditions are actually true.";
 
 export function describeSessionsListTool(): string {
   return [
@@ -63,5 +65,14 @@ export function describeEscalateToOperatorTool(): string {
     "Use this when you do not have enough information or confidence to complete the request correctly, and guessing risks giving a wrong answer.",
     "Call this instead of fabricating a result. State the reason, what you already tried, and, if relevant, the specific question the operator needs to resolve.",
     "After calling this tool, tell the user plainly that you are escalating and why - never present a guess as if it were a verified answer.",
+  ].join(" ");
+}
+
+export function describeVerifyTaskTool(): string {
+  return [
+    "Before declaring a task done, list its concrete completion conditions and report whether each one is actually true - not whether you expect it to be.",
+    "Only mark a condition met if you checked it against a tool result, a file's real contents, or another concrete signal, and cite that in its evidence field.",
+    "If any condition comes back unmet, fix the specific thing that failed and call this again with the same conditions restated.",
+    "If the exact same conditions are still unmet on a second call in a row, this is auto-escalated to the operator - tell the user plainly that you could not complete the task and why, instead of presenting an unverified result as done.",
   ].join(" ");
 }
