@@ -54,6 +54,8 @@ type TaskRegistryStatements = {
   deleteDeliveryState: StatementSync;
   clearRows: StatementSync;
   clearDeliveryStates: StatementSync;
+  claimQueuedRow: StatementSync;
+  releaseRunningRow: StatementSync;
 };
 
 type TaskRegistryDatabase = {
@@ -315,6 +317,24 @@ function createStatements(db: DatabaseSync): TaskRegistryStatements {
     deleteDeliveryState: db.prepare(`DELETE FROM task_delivery_state WHERE task_id = ?`),
     clearRows: db.prepare(`DELETE FROM task_runs`),
     clearDeliveryStates: db.prepare(`DELETE FROM task_delivery_state`),
+    // Atomic cross-process claim: only one caller's UPDATE can match a given
+    // row while it is still "queued" - SQLite serializes concurrent writers
+    // via WAL + busy_timeout (see openTaskRegistryDatabase), so `changes`
+    // tells the caller definitively whether it won the claim.
+    claimQueuedRow: db.prepare(`
+      UPDATE task_runs
+      SET status = 'running', started_at = ?
+      WHERE task_id = ? AND status = 'queued'
+    `),
+    // Atomic complement to claimQueuedRow: only the caller that actually
+    // holds the "running" row can hand it back to "queued". A caller that
+    // raced and lost the original claim (or whose claim already moved on
+    // to a terminal status) gets `changes === 0` and must not touch the row.
+    releaseRunningRow: db.prepare(`
+      UPDATE task_runs
+      SET status = 'queued', started_at = NULL
+      WHERE task_id = ? AND status = 'running'
+    `),
   };
 }
 
@@ -499,6 +519,33 @@ export function saveTaskRegistryStateToSqlite(snapshot: TaskRegistryStoreSnapsho
 export function upsertTaskRegistryRecordToSqlite(task: TaskRecord) {
   const store = openTaskRegistryDatabase();
   store.statements.upsertRow.run(bindTaskRecordBase(task));
+}
+
+/**
+ * Atomically transition a task from "queued" to "running", across processes.
+ * Returns true only for the single caller whose UPDATE actually matched the
+ * row - every other concurrent caller (same process or not) gets false and
+ * must not proceed as if it owns the task.
+ */
+export function claimQueuedTaskInSqlite(params: { taskId: string; startedAt: number }): boolean {
+  const store = openTaskRegistryDatabase();
+  const result = store.statements.claimQueuedRow.run(params.startedAt, params.taskId);
+  const changes = typeof result.changes === "bigint" ? Number(result.changes) : result.changes;
+  return changes === 1;
+}
+
+/**
+ * Atomically hand a "running" task back to "queued", across processes. The
+ * direct complement of claimQueuedTaskInSqlite: it lets a claimant that
+ * failed to actually start work (e.g. spawn failed right after the claim)
+ * release the task instead of leaving it stuck "running" forever. Returns
+ * true only if this call's UPDATE matched the row.
+ */
+export function releaseRunningTaskInSqlite(params: { taskId: string }): boolean {
+  const store = openTaskRegistryDatabase();
+  const result = store.statements.releaseRunningRow.run(params.taskId);
+  const changes = typeof result.changes === "bigint" ? Number(result.changes) : result.changes;
+  return changes === 1;
 }
 
 export function upsertTaskWithDeliveryStateToSqlite(params: {

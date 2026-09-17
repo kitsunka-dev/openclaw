@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import type { ToolLoopDetectionConfig } from "../config/types.tools.js";
 import type { SessionState } from "../logging/diagnostic-session-state.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { digestStable, stableStringify } from "../shared/stable-hash.js";
 import { isPlainObject } from "../utils.js";
 
 const log = createSubsystemLogger("agents/loop-detection");
@@ -113,43 +113,6 @@ function resolveLoopDetectionConfig(config?: ToolLoopDetectionConfig): ResolvedL
  */
 export function hashToolCall(toolName: string, params: unknown): string {
   return `${toolName}:${digestStable(params)}`;
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(",")}]`;
-  }
-  const obj = value as Record<string, unknown>;
-  const keys = Object.keys(obj).toSorted();
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
-}
-
-function digestStable(value: unknown): string {
-  const serialized = stableStringifyFallback(value);
-  return createHash("sha256").update(serialized).digest("hex");
-}
-
-function stableStringifyFallback(value: unknown): string {
-  try {
-    return stableStringify(value);
-  } catch {
-    if (value === null || value === undefined) {
-      return `${value}`;
-    }
-    if (typeof value === "string") {
-      return value;
-    }
-    if (typeof value === "number" || typeof value === "boolean" || typeof value === "bigint") {
-      return `${value}`;
-    }
-    if (value instanceof Error) {
-      return `${value.name}:${value.message}`;
-    }
-    return Object.prototype.toString.call(value);
-  }
 }
 
 function isKnownPollToolCall(toolName: string, params: unknown): boolean {
