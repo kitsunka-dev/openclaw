@@ -218,6 +218,31 @@ export function applyAnthropicPayloadPolicyToParams(
   applyAnthropicCacheControlToMessages(payloadObj.messages, policy.cacheControl);
 }
 
+const EPHEMERAL_CACHE_CONTROL: AnthropicEphemeralCacheControl = { type: "ephemeral" };
+
+function buildEphemeralCacheControlBlocksForSystemText(
+  text: string,
+  rest: Record<string, unknown> = {},
+): Array<Record<string, unknown>> {
+  const split = splitSystemPromptCacheBoundary(text);
+  if (!split) {
+    return [{ ...rest, type: "text", text, cache_control: EPHEMERAL_CACHE_CONTROL }];
+  }
+  const blocks: Array<Record<string, unknown>> = [];
+  if (split.stablePrefix) {
+    blocks.push({
+      ...rest,
+      type: "text",
+      text: split.stablePrefix,
+      cache_control: EPHEMERAL_CACHE_CONTROL,
+    });
+  }
+  if (split.dynamicSuffix) {
+    blocks.push({ ...rest, type: "text", text: split.dynamicSuffix });
+  }
+  return blocks;
+}
+
 export function applyAnthropicEphemeralCacheControlMarkers(
   payloadObj: Record<string, unknown>,
 ): void {
@@ -229,17 +254,23 @@ export function applyAnthropicEphemeralCacheControlMarkers(
   for (const message of messages as Array<{ role?: string; content?: unknown }>) {
     if (message.role === "system" || message.role === "developer") {
       if (typeof message.content === "string") {
-        message.content = [
-          { type: "text", text: message.content, cache_control: { type: "ephemeral" } },
-        ];
+        message.content = buildEphemeralCacheControlBlocksForSystemText(message.content);
         continue;
       }
       if (Array.isArray(message.content) && message.content.length > 0) {
-        const last = message.content[message.content.length - 1];
+        const lastIndex = message.content.length - 1;
+        const last = message.content[lastIndex];
         if (last && typeof last === "object") {
-          const record = last as Record<string, unknown>;
-          if (record.type !== "thinking" && record.type !== "redacted_thinking") {
-            record.cache_control = { type: "ephemeral" };
+          const { cache_control: _existingCacheControl, ...rest } = last as Record<string, unknown>;
+          if (rest.type === "text" && typeof rest.text === "string") {
+            const { text, ...restWithoutText } = rest;
+            message.content.splice(
+              lastIndex,
+              1,
+              ...buildEphemeralCacheControlBlocksForSystemText(text, restWithoutText),
+            );
+          } else if (rest.type !== "thinking" && rest.type !== "redacted_thinking") {
+            (last as Record<string, unknown>).cache_control = EPHEMERAL_CACHE_CONTROL;
           }
         }
       }
