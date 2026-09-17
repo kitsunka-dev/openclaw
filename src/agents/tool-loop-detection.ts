@@ -449,7 +449,7 @@ export function detectToolCallLoop(
       level: "critical",
       detector: "unknown_tool_repeat",
       count: unknownToolStreak.count,
-      message: `CRITICAL: attempted unavailable tool ${unknownToolStreak.unknownToolName ?? toolName} ${unknownToolStreak.count} times. Stop retrying that missing tool and answer without it.`,
+      message: `CRITICAL: attempted unavailable tool ${unknownToolStreak.unknownToolName ?? toolName} ${unknownToolStreak.count} times. Stop retrying that missing tool. Call escalate_to_operator with this as the reason instead of guessing an answer.`,
       warningKey: `unknown-tool:${toolName}:${unknownToolStreak.unknownToolName ?? "unknown"}`,
     };
   }
@@ -463,7 +463,7 @@ export function detectToolCallLoop(
       level: "critical",
       detector: "global_circuit_breaker",
       count: noProgressStreak,
-      message: `CRITICAL: ${toolName} has repeated identical no-progress outcomes ${noProgressStreak} times. Session execution blocked by global circuit breaker to prevent runaway loops.`,
+      message: `CRITICAL: ${toolName} has repeated identical no-progress outcomes ${noProgressStreak} times. Session execution blocked by global circuit breaker to prevent runaway loops. Call escalate_to_operator with this as the reason instead of retrying further.`,
       warningKey: `global:${toolName}:${currentHash}:${noProgress.latestResultHash ?? "none"}`,
     };
   }
@@ -479,7 +479,7 @@ export function detectToolCallLoop(
       level: "critical",
       detector: "known_poll_no_progress",
       count: noProgressStreak,
-      message: `CRITICAL: Called ${toolName} with identical arguments and no progress ${noProgressStreak} times. This appears to be a stuck polling loop. Session execution blocked to prevent resource waste.`,
+      message: `CRITICAL: Called ${toolName} with identical arguments and no progress ${noProgressStreak} times. This appears to be a stuck polling loop. Session execution blocked to prevent resource waste. Call escalate_to_operator with this as the reason instead of retrying further.`,
       warningKey: `poll:${toolName}:${currentHash}:${noProgress.latestResultHash ?? "none"}`,
     };
   }
@@ -517,7 +517,7 @@ export function detectToolCallLoop(
       level: "critical",
       detector: "ping_pong",
       count: pingPong.count,
-      message: `CRITICAL: You are alternating between repeated tool-call patterns (${pingPong.count} consecutive calls) with no progress. This appears to be a stuck ping-pong loop. Session execution blocked to prevent resource waste.`,
+      message: `CRITICAL: You are alternating between repeated tool-call patterns (${pingPong.count} consecutive calls) with no progress. This appears to be a stuck ping-pong loop. Session execution blocked to prevent resource waste. Call escalate_to_operator with this as the reason instead of retrying further.`,
       pairedToolName: pingPong.pairedToolName,
       warningKey: pingPongWarningKey,
     };

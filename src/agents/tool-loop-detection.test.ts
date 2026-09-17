@@ -176,6 +176,7 @@ function expectPingPongLoop(
   expect(loopResult.count).toBe(expected.count);
   if (expected.expectCriticalText) {
     expect(loopResult.message).toContain("CRITICAL");
+    expect(loopResult.message).toContain("escalate_to_operator");
   }
 }
 
@@ -427,6 +428,7 @@ describe("tool-loop-detection", () => {
         expect(loopResult.level).toBe("critical");
         expect(loopResult.detector).toBe("known_poll_no_progress");
         expect(loopResult.message).toContain("CRITICAL");
+        expect(loopResult.message).toContain("escalate_to_operator");
       }
     });
 
@@ -459,6 +461,7 @@ describe("tool-loop-detection", () => {
         expect(loopResult.level).toBe("critical");
         expect(loopResult.detector).toBe("global_circuit_breaker");
         expect(loopResult.message).toContain("global circuit breaker");
+        expect(loopResult.message).toContain("escalate_to_operator");
       }
     });
 
@@ -524,6 +527,7 @@ describe("tool-loop-detection", () => {
       if (loopResult.stuck) {
         expect(loopResult.detector).toBe("unknown_tool_repeat");
         expect(loopResult.level).toBe("critical");
+        expect(loopResult.message).toContain("escalate_to_operator");
       }
     });
 
