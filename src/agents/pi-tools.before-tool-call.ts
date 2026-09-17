@@ -148,6 +148,11 @@ export async function runBeforeToolCallHook(args: {
     if (loopResult.stuck) {
       if (loopResult.level === "critical") {
         log.error(`Blocking ${toolName} due to critical loop: ${loopResult.message}`);
+        if (loopResult.escalation) {
+          // Record the escalation unconditionally - do not depend on the
+          // model actually calling escalate_to_operator on its own.
+          log.error(`Auto-escalated to operator: ${JSON.stringify(loopResult.escalation)}`);
+        }
         logToolLoopAction({
           sessionKey: args.ctx.sessionKey,
           sessionId: args.ctx?.agentId,

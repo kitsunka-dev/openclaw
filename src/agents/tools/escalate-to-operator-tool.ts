@@ -22,6 +22,31 @@ const EscalateToOperatorToolSchema = Type.Object({
   ),
 });
 
+export type EscalationRecord = {
+  status: "escalated";
+  reason: string;
+  attempted?: string;
+  question?: string;
+};
+
+/**
+ * Shared shape-builder so a model-initiated escalate_to_operator call and a
+ * code-detected auto-escalation (e.g. a critical tool-loop block) produce the
+ * exact same record - one path doesn't have to happen for the other to count.
+ */
+export function buildEscalationRecord(params: {
+  reason: string;
+  attempted?: string;
+  question?: string;
+}): EscalationRecord {
+  return {
+    status: "escalated",
+    reason: params.reason,
+    ...(params.attempted ? { attempted: params.attempted } : {}),
+    ...(params.question ? { question: params.question } : {}),
+  };
+}
+
 export function createEscalateToOperatorTool(): AnyAgentTool {
   return {
     label: "Escalate to Operator",
@@ -36,12 +61,7 @@ export function createEscalateToOperatorTool(): AnyAgentTool {
       const question = readStringParam(params, "question");
       return {
         content: [],
-        details: {
-          status: "escalated" as const,
-          reason,
-          ...(attempted ? { attempted } : {}),
-          ...(question ? { question } : {}),
-        },
+        details: buildEscalationRecord({ reason, attempted, question }),
       };
     },
   };
