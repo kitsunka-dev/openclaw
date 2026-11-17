@@ -255,6 +255,32 @@ const STRIPE_FILE_SECONDS_HINTS = new Map<string, number>([
   ["test/scripts/test-projects.test.ts", 20],
   ["test/scripts/vitest-worker-artifacts.test.ts", 188],
   ["test/scripts/vitest-worker-artifacts.transforms.test.ts", 76],
+  // unit-src stripe anchors: per-file walls rounded up from one local full
+  // vitest.unit-src.config.ts run (passing files only). Without them all 655
+  // files weigh 3s and the stripes balance by file count, not cost. Refresh
+  // from CI timings when available.
+  ["src/flows/doctor-health.test.ts", 110],
+  ["src/state/openclaw-database-preflight.lifecycle.test.ts", 62],
+  ["src/state/openclaw-database-preflight.agent.test.ts", 52],
+  ["src/state/agent-database-admission.test.ts", 45],
+  ["src/mcp/plugin-tools-registration.stdio.test.ts", 41],
+  ["src/state/openclaw-state-db-readonly.test.ts", 40],
+  ["src/flows/doctor-health.update-schema.test.ts", 34],
+  ["src/state/openclaw-state-lease-heartbeat.test.ts", 31],
+  ["src/snapshot/git-backup-streaming.test.ts", 28],
+  ["src/state/openclaw-agent-db.test.ts", 25],
+  ["src/node-host/node-worker-prepared-workspace.test.ts", 24],
+  ["src/node-host/node-worker-supervisor.container.test.ts", 23],
+  ["src/transcripts/store.test.ts", 21],
+  ["src/state/openclaw-database-preflight.test.ts", 60],
+  ["src/flows/doctor-health-contributions.auth-import-order.test.ts", 51],
+  ["src/state/openclaw-database-preflight.artifacts.test.ts", 37],
+  ["src/system-agent/chat-turn-router.approval.test.ts", 20],
+  ["src/worker/worker.runtime.test.ts", 20],
+  ["src/claws/lifecycle-remove-approvals.test.ts", 18],
+  ["src/audit/message-delivery-progress-store.test.ts", 17],
+  ["src/system-agent/config-redaction.test.ts", 17],
+  ["src/model-catalog/pricing.test.ts", 16],
 ]);
 const DEFAULT_STRIPE_FILE_SECONDS = 3;
 // Run 33364935118: 494 unlisted tooling files used 945.94s including imports/setup.
